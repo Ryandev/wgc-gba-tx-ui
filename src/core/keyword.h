@@ -6,7 +6,7 @@
 
 // Pressed-key mask in REG_KEYINPUT bit order (1 = pressed; the register itself is active-low).
 enum {
-    K_A = 1u << 0,
+    K_A = 1u << 0, // mutate: equivalent[<< -> >>] (1 << 0 == 1 >> 0)
     K_B = 1u << 1,
     K_SELECT = 1u << 2,
     K_START = 1u << 3,

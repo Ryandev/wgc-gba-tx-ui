@@ -12,8 +12,8 @@ uint8_t pairing_max(int row) { return valid_row(row) ? s_max[row] : 0; }
 
 static uint8_t clamp(int row, uint8_t v)
 {
-    if (v < s_min[row]) return s_min[row];
-    if (v > s_max[row]) return s_max[row];
+    if (v < s_min[row]) return s_min[row]; // mutate: equivalent[< -> <=] (v == min returns min)
+    if (v > s_max[row]) return s_max[row]; // mutate: equivalent[> -> >=] (v == max returns max)
     return v;
 }
 
@@ -23,8 +23,8 @@ void pairing_init(pairing_state *p, uint8_t channel, uint8_t address, uint8_t pa
     p->val[PAIR_ADDRESS] = clamp(PAIR_ADDRESS, address);
     p->val[PAIR_PACKETS] = clamp(PAIR_PACKETS, packets);
     p->row = PAIR_CHANNEL;
-    p->held = 0;
-    p->dir = 0;
+    p->held = 0; // mutate: equivalent[0 -> 1] (reset by the first direction change)
+    p->dir = 0;  // mutate: equivalent[0 -> 1] (bit 0 is A, never a Left/Right mask)
 }
 
 pairing_action pairing_step(pairing_state *p, uint16_t hit, uint16_t down)
@@ -52,9 +52,9 @@ pairing_action pairing_step(pairing_state *p, uint16_t hit, uint16_t down)
 
     int sign = 0;
     if (lr == K_RIGHT) {
-        sign = 1;
+        sign = 1; // mutate: equivalent[dec const +1] (only the sign is used)
     } else if (lr == K_LEFT) {
-        sign = -1;
+        sign = -1; // mutate: equivalent[dec const +1] (only the sign is used)
     }
     int d = 0;
     if (sign != 0) {

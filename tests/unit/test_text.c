@@ -22,11 +22,14 @@ static void test_fmt_u8(void)
 
 static void test_fmt_hex3(void)
 {
-    char b[4];
+    char b[8];
+    memset(b, 'x', sizeof b); // sentinel: the terminator must be written, not found by luck
     fmt_hex3(b, 0x301);
     TEST_ASSERT_EQUAL_STRING("301", b);
     fmt_hex3(b, 0xFABC); // only the low 12 bits
     TEST_ASSERT_EQUAL_STRING("ABC", b);
+    TEST_ASSERT_EQUAL_CHAR('\0', b[3]);
+    TEST_ASSERT_EQUAL_CHAR('x', b[4]); // and nothing past it
 }
 
 static void test_menu_row(void)
@@ -44,6 +47,8 @@ static void test_menu_row_truncates_safely(void)
     memset(b, 'x', sizeof b);
     fmt_menu_row(b, sizeof b, "RF CHANNEL", 7, 1);
     TEST_ASSERT_EQUAL_STRING(">RF CHA", b); // 7 chars + NUL
+    fmt_menu_row(b, 7, "X", 255, 1);        // cap 7 = 6 chars + NUL: the number fits exactly
+    TEST_ASSERT_EQUAL_STRING(">X: 25", b);
     fmt_menu_row(b, 1, "X", 1, 0);
     TEST_ASSERT_EQUAL_STRING("", b);
     b[0] = 'q';

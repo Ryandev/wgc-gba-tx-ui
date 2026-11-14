@@ -22,9 +22,9 @@ void fmt_hex3(char *out, uint16_t v)
 void fmt_menu_row(char *out, size_t cap, const char *label, uint8_t value, int selected)
 {
     if (cap == 0) return;
-    char num[4];
+    char num[4]; // mutate: equivalent[dec const +1] (larger buffer changes nothing)
     size_t n = 0;
-    const char *parts[3] = {selected ? ">" : " ", label, ": "};
+    const char *parts[3] = {selected ? ">" : " ", label, ": "}; // mutate: equivalent[dec const +1]
     for (int i = 0; i < 3; i++)
         for (const char *p = parts[i]; *p && n + 1 < cap; p++) out[n++] = *p;
     fmt_u8(num, value);

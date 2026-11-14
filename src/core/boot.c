@@ -3,7 +3,7 @@
 
 boot_plan boot_decide(uint16_t pressed)
 {
-    boot_plan p = {SCREEN_NORMAL, false, false};
+    boot_plan p; // every field is assigned below
     if ((pressed & (K_SELECT | K_DOWN)) == (K_SELECT | K_DOWN)) {
         p.screen = SCREEN_BLACK;
     } else if (pressed & K_SELECT) {

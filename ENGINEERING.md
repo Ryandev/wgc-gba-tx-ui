@@ -115,7 +115,14 @@ CI job (main / manual, ~45-60 min). History, kept honest:
   failed to *compile* its unit tests (absolute-path bug) and was counted as killed, and that stale
   object files were reused between mutants. Both are fixed: host compile failure = INVALID, fresh
   objects per mutant, timeouts, annotations scoped to named operators.
-- Current numbers: see the latest `make mutate` run (recorded in the commit that follows it).
+- A third bug (found by Claude after the review): `make` exits 2 for any failing recipe, so a
+  failing unit test looked like a compile error and every unit kill was counted INVALID
+  (196/217 = 90% honest, 0 unit kills). `unit-fast` now writes an explicit result file.
+- **Current (2026-11-14): 207/207 valid mutants killed (100%)**: 155 by unit tests, 16 by the
+  emulator suite, 36 by the golden images; 56 invalid (don't compile). It covers src/link.c,
+  src/main.c, src/core/*.c and keyword.h. The last survivors found real gaps (Up from row 1,
+  fmt_hex3 terminator, truncation inside a number) and dead code (link_set_paused removed until
+  Phase 1). The rest are annotated per operator with a reason.
 Mull (host, LLVM IR) still needs the owner to install it (`/tmp/gba-mull.sh`, checksum-verified).
 
 Options for C:

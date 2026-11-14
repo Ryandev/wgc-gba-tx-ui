@@ -108,7 +108,12 @@ def run_one(mt, tmp):
     mk = ['make', '-s', '-C', tmp, f'B={b}', f'DEPS={ROOT}/build/deps']
     if run(mk + [f'{b}/wgc-gba-tx-ui.gba'], 300): return 'INVALID (build)'   # compile errors aren't kills
     if mt['file'].startswith('src/core/'):
-        rc = run(mk + ['unit-fast', 'UNIT_TESTS=' + ' '.join(unit_tests_for(mt['file']))], 300)
+        result = os.path.join(b, 'unit-fast', 'result')
+        if os.path.exists(result): os.remove(result)
+        if run(mk + ['unit-fast', 'UNIT_TESTS=' + ' '.join(unit_tests_for(mt['file']))], 300) == 124:
+            return 'KILLED (timeout)'
+        # make's own exit code can't distinguish a failing test from a compile error: read the result
+        rc = int(open(result).read().strip()) if os.path.exists(result) else 2
         if rc == 2: return 'INVALID (host build)'
         if rc == 124: return 'KILLED (timeout)'
         if rc: return 'KILLED (unit)'

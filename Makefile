@@ -162,14 +162,17 @@ unit: $(DEPS)/.stamp
 	done; done
 
 # For mutation testing: only the unit tests in UNIT_TESTS, no coverage, 10 s timeout per binary.
-# Exit 2 = didn't compile, 1 = a test failed, 124 = timed out.
+# The outcome goes in $(B)/unit-fast/result: 0 = pass, 2 = didn't compile, 1 = a test failed,
+# 124 = timed out. (make itself exits 2 for ANY failing recipe, so its exit code can't tell a
+# failing test from a compile error; that misclassified every unit kill as INVALID.)
 UNIT_TESTS ?= $(UNIT_SRC)
 unit-fast: $(DEPS)/.stamp
-	@for proto in V11A V11B; do for t in $(UNIT_TESTS); do \
-	  n=$$(basename $$t .c); \
-	  $(call build-unit,$$proto,$$t,$(abspath $(B))/unit-fast/$$proto/$$n,); \
-	  timeout 10 $$d/$$n > $$d/out.txt || exit $$?; \
-	done; done
+	@mkdir -p $(B)/unit-fast; \
+	( for proto in V11A V11B; do for t in $(UNIT_TESTS); do \
+	    n=$$(basename $$t .c); \
+	    $(call build-unit,$$proto,$$t,$(abspath $(B))/unit-fast/$$proto/$$n,); \
+	    timeout 10 $$d/$$n > $$d/out.txt || exit $$?; \
+	  done; done ); echo $$? > $(B)/unit-fast/result
 
 # Coverage gated per protocol: pooling V11A + V11B could hide a branch only one reaches (chunk2 F6).
 COV_LINE   ?= 100

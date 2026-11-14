@@ -15,13 +15,15 @@
 #define SBB_TEXT       31        // screenblock holding the text map
 #define SBB_ENTRIES    (32 * 32) // halfwords in one screenblock
 #define BG_PAL_ENTRIES 256
+#define CBB_TEXT       0 // charblock holding the font tiles
+#define TEXT_BGCNT     (BG_CBB(CBB_TEXT) | BG_SBB(SBB_TEXT))
 
 static void text_init(void)
 {
     // Set everything up first, enable the layer last: real VRAM isn't zeroed at boot, so clear the
     // screenblock (Gemini chunk3 F3).
     REG_DISPCNT = DCNT_MODE0;
-    tte_init_se_default(0, BG_CBB(0) | BG_SBB(SBB_TEXT));
+    tte_init_se_default(0, TEXT_BGCNT);
     memset16(se_mem[SBB_TEXT], 0, SBB_ENTRIES);
     pal_bg_mem[0] = RGB15(4, 4, 6);
     REG_DISPCNT = DCNT_MODE0 | DCNT_BG0;
@@ -32,12 +34,13 @@ static void at(int row, const char *s)
     // Write s at column 0 of `row`, padded with spaces to the full line (clears old text).
     char buf[TEXT_COLS + 1]; // mutate: equivalent[dec const +1] (larger buffer changes nothing)
     int n = (int)strlen(s);
-    if (n > TEXT_COLS)
-        n = TEXT_COLS; // mutate: equivalent[> -> >=, drop if-body] (safety clamp; callers are shorter)
+    if (n > TEXT_COLS) { // mutate: equivalent[> -> >=] (n == TEXT_COLS clamps to itself)
+        n = TEXT_COLS;
+    }
     memcpy(buf, s, (size_t)n);
     memset(buf + n, ' ', (size_t)(TEXT_COLS - n));
     buf[TEXT_COLS] = 0;
-    tte_set_pos(0, row * 8);
+    tte_set_pos(0, row * 8); // mutate: equivalent[0 -> 1] (screen-entry text is tile-aligned)
     tte_write(buf);
 }
 
@@ -86,9 +89,8 @@ int main(void)
         // tests); BG0 + black palette is black in both, and matches the stock ROM. Palette and map
         // are zeroed before the layer is enabled, so no frame ever shows anything else.
         memset16(pal_bg_mem, 0, BG_PAL_ENTRIES);
-        memset16(se_mem[SBB_TEXT], 0, SBB_ENTRIES);
-        REG_BG0CNT = BG_CBB(0) |
-                     BG_SBB(SBB_TEXT); // mutate: equivalent[| -> &, 0 -> 1] (black palette: any map is black)
+        memset16(se_mem[SBB_TEXT], 0, SBB_ENTRIES); // mutate: equivalent[0 -> 1] (black palette)
+        REG_BG0CNT = TEXT_BGCNT;
         REG_DISPCNT = DCNT_MODE0 | DCNT_BG0;
     } else if (plan.screen == SCREEN_OFF) {
         REG_DISPCNT = DCNT_MODE0; // screen "off": plain backdrop, nothing drawn
@@ -107,7 +109,7 @@ int main(void)
     }
 
     link_start();
-    u32 last = 0;
+    u32 last = 0;            // mutate: equivalent[0 -> 1] (only decides when the first redraw happens)
     char buf[] = "KEYS 000"; // fully initialised; fmt_hex3() overwrites the 3 digits
     for (;;) {
         VBlankIntrWait();

@@ -64,6 +64,8 @@ static void test_up_down_navigation_is_bounded(void)
     TEST_ASSERT_EQUAL_INT(PAIR_PACKETS, p.row);
     tap(K_UP);
     TEST_ASSERT_EQUAL_INT(PAIR_ADDRESS, p.row);
+    tap(K_UP);
+    TEST_ASSERT_EQUAL_INT(PAIR_CHANNEL, p.row); // row 1 -> 0 (mutation testing: never tested)
 }
 
 /* Frame-exact repeat timing (Gemini chunk1 F3): press = frame 1 (+1). Holding: first repeat on

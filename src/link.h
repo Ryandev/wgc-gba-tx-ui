@@ -10,8 +10,8 @@ void link_sync(void);    // first write the ATtiny acts on; nothing before it is
 void link_gb_mode(void); // GB mode pair; only valid straight after link_sync()
 void link_pair(u8 channel, u8 address, u8 packets); // sync + pairing message (SPEC §S)
 
-void link_start(void);             // start the ~2 ms timer-3 IRQ that sends key words
-void link_set_paused(bool paused); // true: send "no keys" (menus that must not reach the Pi)
+void link_start(void); // start the ~2 ms timer-3 IRQ that sends key words
+// link_set_paused() (send "no keys" while a menu is open) returns with the Phase 1 overlay, with tests.
 
 // Status for the UI (written in the IRQ, read anywhere)
 extern volatile u16 link_last_word; // last key word sent
