@@ -25,7 +25,10 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, '..', 'assets', 'controller.svg')
 
 # ---- the dimension table (mm) --------------------------------------------------------------
-# name: (value, tag)  P = provisional (reference proportions, rescaled), M = measured on a real GBA
+# name: (value, tag)  P = provisional (reference proportions, rescaled), M = measured on a real GBA,
+#                     C = measured from the owner's giant-GBA CAD (../CAD lib/assembly_positions.py and
+#                         lib/step part sizes, 1:1 mm; the model is built at 9.8067x). Converted with
+#                         x = cad_x + 72.25 (centred), y = 41.2 - cad_y (LCD centres aligned).
 D = {
     'width':            (144.5, 'P'),  # published AGB-001 outer width
     'height':           (82.0, 'P'),   # published AGB-001 outer height (centre of bottom edge)
@@ -37,19 +40,19 @@ D = {
     # Shoulder buttons: a band along the top-corner curve, only its raised edge shows
     'shoulder_l':       ((4.5, 33.0, 2.4, 0), 'P'),      # x0, x1, rise above the body edge, (unused)
     # Screen lens and LCD
-    'lens':             ((34.2, 8.6, 110.3, 74.9), 'P'),     # x0, y0, x1, y1
+    'lens':             ((34.44, 8.98, 110.06, 73.08), 'C'), # x0, y0, x1, y1: 75.63 x 64.10 at (0, 0.17)
     'lens_r_top':       (6.0, 'P'),
     'lens_r_bottom':    (12.0, 'P'),
-    'lcd_size':         ((61.2, 40.8), 'P'),                 # published visible area of the AGB LCD
-    'lcd_centre':       ((73.3, 37.3), 'P'),
+    'lcd_size':         ((61.0, 39.5), 'C'),                 # screen_bezel window 61.01 x 39.54
+    'lcd_centre':       ((72.25, 37.3), 'C'),                # the anchor: cad (0, 3.90)
     'top_slot':         ((72.25, 4.4, 16.5, 3.8), 'P'),      # centre x, centre y, length, height
-    'led':              ((118.5, 14.4, 1.5), 'P'),           # centre x, y, radius
+    'led':              ((118.4, 14.55, 1.2), 'C'),          # power_led (46.15, 26.65), d 2.37
     # Controls
-    'dpad':             ((20.2, 34.7, 16.9, 5.6), 'P'),      # centre x, y, tip-to-tip span, arm width
-    'btn_a':            ((131.4, 31.5, 4.3), 'P'),           # centre x, y, radius
-    'btn_b':            ((119.3, 35.9, 4.3), 'P'),
-    'btn_start':        ((30.1, 54.6, 2.0), 'P'),            # the round button; START above SELECT
-    'btn_select':       ((30.1, 62.9, 2.0), 'P'),
+    'dpad':             ((19.71, 34.08, 16.9, 5.6), 'C'),    # centre from cad (-52.54, 7.12); span/arm still P
+    'btn_a':            ((131.33, 31.85, 4.3), 'C'),         # cad (59.08, 9.35); radius still P
+    'btn_b':            ((118.33, 36.35, 4.3), 'C'),         # cad (46.08, 4.85); radius still P
+    'btn_start':        ((29.32, 53.97, 2.0), 'C'),          # cad (-42.93, -12.77); START above SELECT
+    'btn_select':       ((29.32, 61.97, 2.0), 'C'),          # cad (-42.93, -20.77)
     'plate':            ((13.0, 3.2, 14.0), 'P'),            # length to the button centre, thickness, slope deg
     'speaker':          ((115.2, 51.0, 14.8, 1.6, 3.0, -14.0, 6), 'P'),  # x0, y0, length, width, pitch, slope deg, count
 }
@@ -155,13 +158,15 @@ def build():
         path(f'speaker-{i + 1}', 'slot', slanted_pill(sx0, y, sx0 + sln * math.cos(ang), y + sln * math.sin(ang), swd))
 
     provisional = sorted(k for k, (_, tag) in D.items() if tag == 'P')
+    from_cad = sorted(k for k, (_, tag) in D.items() if tag == 'C')
     css = ('.body{fill:#5040a8}.shoulder{fill:#382c80}.lens{fill:#202030}.lcd{fill:#b0d890}'
            '.button{fill:#3c3c4c}.plate{fill:#3c3090}.slot{fill:#281c60}.led{fill:#58e070}')
     out = [f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {f(w)} {f(h)}" width="{f(w)}mm" height="{f(h)}mm">',
            '<!-- wgc-gba-tx-ui: Game Boy Advance (AGB-001) front, our own drawing from a dimension table',
            '     (tools/gen_controller_svg.py). Units: mm. Part ids are used by the asset pipeline;',
            '     colours here are only a preview (the ROM assigns palette roles by class/id).',
-           f'     Provisional dimensions (to be checked with callipers): {", ".join(provisional)} -->',
+           f'     From the owner\'s CAD (1:1): {", ".join(from_cad)}',
+           f'     Provisional (proportions of a reference, rescaled): {", ".join(provisional)} -->',
            f'<style>{css}</style>']
     out += [el for _, _, el in parts]
     out.append('</svg>')
