@@ -1,14 +1,25 @@
-// Main screen (SPEC.md §A, §C): the controller drawing on affine BG2, lit by palette writes.
+// Main screen (SPEC.md §A, §C): the controller drawing on affine BG2, lit by palette writes, with
+// timed notes on its LCD (BG0 text layer) and the status LED.
 #pragma once
 #include <stdbool.h>
 #include <tonc_types.h>
+#include "core/notes.h"
 #include "core/view.h"
 
-// Load the drawing (tiles, map, palette) and show it from the next frame, with the LED and button
-// colours already right for `gb_mode`. Bulk VRAM copies under forced blank: call before
-// link_start() or behind a transition, never during play (SPEC §0 rule 7). Waits for one VBlank.
-void screen_main_init(view_state *v, bool gb_mode);
+typedef struct {
+    view_state view;
+    notes_state notes;
+    note_id shown;     // note currently on the LCD layer (rendered)
+    bool show_pending; // rendered while hidden; show it at the next frame's start
+} main_screen;
 
-// Once per frame, straight after VBlank: light the parts for `word` (the key word the send IRQ
-// last sent) and set the LED. Palette writes only (~30 halfwords).
-void screen_main_frame(view_state *v, u16 word, bool gb_mode);
+// Load the drawing (tiles, map, palette) and the LCD text layer, and show the drawing from the next
+// frame with the LED and button colours already right for `gb_mode`. Bulk VRAM copies under forced
+// blank: call before link_start() or behind a transition, never during play (SPEC §0 rule 7).
+// Waits for one VBlank. held_limit: key-held warning in frames, 0 = off (SPEC §C default).
+void screen_main_init(main_screen *m, bool gb_mode, uint32_t held_limit);
+
+// Once per frame, straight after VBlank, with the key word the send IRQ last sent. Palette writes
+// and at most two tile rows of the LCD layer (the countdown bar); a new note is rendered with the
+// layer hidden and shown from the next frame.
+void screen_main_frame(main_screen *m, u16 word);

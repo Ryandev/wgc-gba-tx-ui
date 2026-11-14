@@ -206,6 +206,11 @@ Sources are committed; everything the ROM uses is generated at build time into `
 - Both tools are deterministic and tested (`tests/test_tools.py`, `make tools-test`, in `make check`).
   Needs `python3-pil` and `librsvg2-bin`.
 
+**Colour-only captures.** A capture named `*_colours` (e.g. `pairing__frame7_colours`) is compared by
+the set of colours it contains, not pixel by pixel. It's for boot transition frames, where the
+scanline at which startup finishes moves with code size, but what matters is that no garbage
+colour ever shows.
+
 ## Sources
 - Tonc / libtonc notes (32-bit types, general GBA programming):
   https://www.github.com/gbadev-org/libtonc/blob/master/libtonc.txt

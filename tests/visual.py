@@ -29,9 +29,10 @@ SCREENS = {
                 'k:B>v', 'f:7', 'p:b_right_down', 'k:A>', 'f:7', 'p:hex5', 'k:B<', 'f:7', 'p:hexA',
                 'k:AB<', 'f:7', 'p:hexB', 'k:A><', 'f:7', 'p:hexD', 'k:B><', 'f:7', 'p:hexE', 'k:^v<>', 'f:7', 'p:hex3C',
                 'k:-', 'f:7', 'p:released'],
-    # GB mode: amber LED; L/R pressed light amber (pressed but not sent); the fade ends at exactly 6
+    # GB mode: quiet (amber LED only) until L/R; then L/R light amber (pressed but not sent), the other
+    # is struck through and the LCD note counts down 3 s from the last L/R press, then all hides
     'gb_mode': ['k:A', 'f:30', 'k:-', 'f:7', 'p:shown', 'k:l', 'f:7', 'p:l_amber', 'k:r', 'f:7', 'p:r_amber',
-                'k:-', 'f:3', 'p:r_fading', 'f:4', 'p:faded'],
+                'k:-', 'f:3', 'p:r_fading', 'f:4', 'p:faded', 'f:76', 'p:note_half', 'f:100', 'p:note_gone'],
     # release fade: 6 steps (VIEW_FADE_FRAMES), seen one frame after the release (the release reaches
     # the sent word within 2 ms; the palette is written at the next VBlank). So: half way at 3 frames,
     # the last faint step at 6, exactly back to boot__idle at 7. A longer fade fails a_gone.
@@ -40,8 +41,9 @@ SCREENS = {
     # frame 9 = first frame after startup; frames 1-7 are white in stock too (crt0 clears RAM under forced
     # blank before main), so they're not a useful golden (see SPEC.md, boot flash note)
     'black':   ['k:sv', 'f:9', 'p:frame9', 'f:21', 'p:frame30'],
-    # frame 7: text setup under forced blank, no garbage backdrop (phase1-chunk1 F1, mutation re-run)
-    'pairing': ['k:S', 'f:7', 'p:frame7', 'f:23', 'k:-', 'f:3', 'p:menu', 'k:>', 'f:2', 'k:-', 'f:2', 'k:v', 'f:2', 'k:-', 'f:3',
+    # frame 7: text setup under forced blank, no garbage backdrop (phase1-chunk1 F1, mutation re-run);
+    # compared by colours only: the white/backdrop boundary's scanline moves with boot timing
+    'pairing': ['k:S', 'f:7', 'p:frame7_colours', 'f:23', 'k:-', 'f:3', 'p:menu', 'k:>', 'f:2', 'k:-', 'f:2', 'k:v', 'f:2', 'k:-', 'f:3',
                 'p:moved', 'k:v', 'f:2', 'k:-', 'f:2', 'k:<', 'f:2', 'k:-', 'f:3', 'p:packets_min',
                 'k:A', 'f:2', 'k:-', 'f:5', 'p:sent'],
 }
@@ -58,6 +60,11 @@ def render(harness, rom, steps):
         r = subprocess.run([harness, rom, d, 'dirty'] + steps, capture_output=True, text=True)
         if r.returncode: raise RuntimeError(f'harness: {r.stderr.strip()}')
         return {c: read_ppm(os.path.join(d, c + '.ppm')) for c in captures(steps)}
+
+
+def colours(rgb):
+    """The set of distinct colours in a raw RGB buffer."""
+    return {bytes(rgb[i:i + 3]) for i in range(0, len(rgb), 3)}
 
 
 def diff_image(w, h, gold, act):
@@ -91,7 +98,12 @@ def main():
             write_png(act_path, w, h, act)
             if os.path.exists(diff_path): os.remove(diff_path)        # no stale diffs (chunk3 F6)
             gold = read_png(gold_path) if os.path.exists(gold_path) else None
-            same = gold is not None and gold[:2] == (w, h) and gold[2] == act
+            # captures named *_colours compare only WHICH colours appear, not where: for transition
+            # frames whose exact scanline depends on boot timing (code size), where what matters is
+            # that no garbage colour shows (phase1-chunk2)
+            by_colour = cap.endswith('_colours')
+            same = gold is not None and gold[:2] == (w, h) and (
+                colours(gold[2]) == colours(act) if by_colour else gold[2] == act)
             if approve:
                 if not same:
                     shutil.copy(act_path, gold_path)
@@ -102,6 +114,11 @@ def main():
                 fails += 1
             elif gold[:2] != (w, h):
                 print(f'FAIL  {ver}/{name:28} size {w}x{h} != golden {gold[0]}x{gold[1]}')
+                fails += 1
+            elif not same and by_colour:
+                extra = sorted(c.hex() for c in colours(act) - colours(gold[2]))
+                missing = sorted(c.hex() for c in colours(gold[2]) - colours(act))
+                print(f'FAIL  {ver}/{name:28} colours differ: new {extra}, missing {missing}')
                 fails += 1
             elif not same:
                 changed, dimg = diff_image(w, h, gold[2], act)

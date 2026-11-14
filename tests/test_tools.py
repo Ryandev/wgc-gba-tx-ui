@@ -223,6 +223,36 @@ class SvgToGba(unittest.TestCase):
         c = parts['dpad-centre']
         self.assertAlmostEqual(area(c), gen_controller_svg.DPAD_ARM ** 2, places=6)
 
+    def test_strike_lines_stay_inside_their_shoulder(self):
+        # phase1-chunk2: an unclipped strike showed on the background next to the shoulder. Every
+        # strike pixel must be a pixel its shoulder covers on its own.
+        svg, _ = gen_controller_svg.build()
+        labels, names = svg_to_gba.label_map(svg, 232)
+        index = {pid: i for i, (pid, _) in enumerate(names, 1)}
+        px = labels.load()
+        for side in ('l', 'r'):
+            shoulder = svg_to_gba.render_mask(svg, f'shoulder-{side}', labels.width, labels.height).load()
+            pts = [(x, y) for y in range(labels.height) for x in range(labels.width)
+                   if px[x, y] == index[f'strike-{side}']]
+            self.assertGreater(len(pts), 10, side)
+            outside = [(x, y) for x, y in pts if shoulder[x, y] < 128]
+            self.assertEqual(outside, [], side)
+
+    def test_overlay_keeps_the_raised_parts_edges(self):
+        from PIL import Image
+        # a raised 6x6 part with a 6x2 overlay across its top two rows: the top row stays highlight
+        img = Image.new('L', (8, 8), 0)
+        img.paste(1, (1, 1, 7, 7))
+        img.paste(2, (1, 1, 7, 3))
+        raised = {'data-shade': 'raised', 'data-hi': '#ffffff', 'data-lo': '#000000'}
+        attrs = {'s': raised, 'o': {'data-group': 's', 'data-over': 's'}}
+        out, entries = svg_to_gba.shade(img, [('s', 'x'), ('o', 'x')], attrs, {})
+        e = {n: i for i, (n, _) in enumerate(entries, 1)}
+        self.assertEqual(out.getpixel((3, 1)), e['s-hi'])   # edge: the shoulder's highlight wins
+        self.assertEqual(out.getpixel((1, 2)), e['s-hi'])   # left edge too
+        self.assertEqual(out.getpixel((3, 2)), e['o'])      # interior: the overlay
+        self.assertEqual(out.getpixel((3, 3)), e['s'])      # below the overlay: plain part, no edge
+
     def test_pill_size_and_angle(self):
         p = gen_controller_svg.pill(10, 5, 16, 2, 0)
         xs, ys = [x for x, _ in p], [y for _, y in p]
@@ -285,7 +315,7 @@ class SvgToGba(unittest.TestCase):
         labels, parts = svg_to_gba.label_map(svg, 232)
         tiles, _ = svg_to_gba.tiles_and_map(labels)
         self.assertLessEqual(len(tiles), svg_to_gba.MAX_TILES)
-        self.assertEqual(len(parts), 25)
+        self.assertEqual(len(parts), 27)
         # every part is visible (none fully hidden under a later one)
         self.assertEqual({i for i, n in enumerate(labels.histogram()) if n}, set(range(len(parts) + 1)))
 

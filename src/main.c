@@ -19,7 +19,12 @@
 #define BG_PAL_ENTRIES 256
 #define CBB_TEXT       0 // charblock holding the font tiles
 #define TEXT_BGCNT     (BG_CBB(CBB_TEXT) | BG_SBB(SBB_TEXT))
-#define TEXT_BUPOFS    0 // mutate: equivalent[0 -> 1] (tte_init_se puts the ink at bupofs + 1: colour follows)
+// Key-held warning (SPEC §C): off by default; build with -DHELD_WARN_SECS=60 to turn it on.
+#ifndef HELD_WARN_SECS
+#define HELD_WARN_SECS 0
+#endif
+#define HELD_WARN_FRAMES ((uint32_t)(HELD_WARN_SECS * 60))
+#define TEXT_BUPOFS      0 // mutate: equivalent[0 -> 1] (tte_init_se puts the ink at bupofs + 1: colour follows)
 
 static void text_init(void)
 {
@@ -88,8 +93,7 @@ int main(void)
 
     // Read the boot holds BEFORE anything goes on the bus (SPEC.md §S boot order).
     boot_plan plan = boot_decide(pressed_now());
-    view_state view;
-    view_init(&view);
+    main_screen screen;
 
     if (plan.screen == SCREEN_BLACK) {
         // Black screen (backlit mods), done the stock way: BG0 on, whole palette black. Palette and
@@ -110,7 +114,7 @@ int main(void)
         at(1, "PROTOCOL " PROTO_NAME);
         pairing_menu(); // never returns
     } else {
-        screen_main_init(&view, plan.gb_mode); // bulk VRAM load, before any key traffic (SPEC §0 rule 7)
+        screen_main_init(&screen, plan.gb_mode, HELD_WARN_FRAMES); // bulk VRAM load, before key traffic
     }
 
     link_sync();
@@ -120,6 +124,6 @@ int main(void)
     for (;;) {
         VBlankIntrWait();
         // Palette writes only, at the start of VBlank, from the word the send IRQ last sent
-        if (plan.screen == SCREEN_NORMAL) screen_main_frame(&view, link_last_word, plan.gb_mode);
+        if (plan.screen == SCREEN_NORMAL) screen_main_frame(&screen, link_last_word);
     }
 }

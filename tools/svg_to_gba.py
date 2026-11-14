@@ -133,6 +133,8 @@ def shade(labels, parts, attrs, colours):
           in the same group gets <part>-hi, else one whose down neighbour isn't gets <part>-lo.
       data-shade="rim" data-rim: a pixel next to transparent (up, down or left) gets <part>-rim.
       data-shade="top-hi" data-hi: a pixel whose up neighbour is a part drawn earlier gets <part>-hi.
+      data-over="<part>": this part lies on a raised <part> (same data-group); on that part's edge
+          pixels the part's own highlight/shadow wins, so overlays never break the outline.
       data-glow-into="<part>": that part's pixels near this part's centre become <part>-glow1/2,
           defaulting to a blend of the two colours (the ROM rewrites them with the LED status).
     Returns (new label image, [(entry name, rgb)] for palette indices 1..N).
@@ -172,7 +174,10 @@ def shade(labels, parts, attrs, colours):
         for x in range(w):
             i = src[x, y]
             pid = pid_of.get(i)
-            if pid not in extra:
+            over = attrs[pid].get('data-over') if pid else None
+            if over in extra and attrs[over].get('data-shade') == 'raised':
+                pid = over   # shade as the part it lies on; the overlay keeps the interior pixels
+            elif pid not in extra:
                 continue
             mode = attrs[pid]['data-shade']
             up, dn, lf = at(x, y - 1), at(x, y + 1), at(x - 1, y)
@@ -240,8 +245,17 @@ def c_ident(s):
     return re.sub(r'\W', '_', s).upper()
 
 
-def emit(name, svg_path, labels, entries, tiles, amap):
-    """entries: [(name, rgb)] for palette indices 1..N."""
+def part_boxes(labels, parts):
+    """{part id: (x0, y0, x1, y1)} pixel bounding box (inclusive) of each part, before shading."""
+    out = {}
+    for i, (pid, _) in enumerate(parts, 1):
+        box = labels.point(lambda v, i=i: 255 if v == i else 0).getbbox()
+        out[pid] = (box[0], box[1], box[2] - 1, box[3] - 1)
+    return out
+
+
+def emit(name, svg_path, labels, entries, tiles, amap, boxes=None):
+    """entries: [(name, rgb)] for palette indices 1..N; boxes: part_boxes() for #defines."""
     w, h = labels.size
     pal = [0] + [rgb15(rgb) for _, rgb in entries]
     used = len(pal)
@@ -256,8 +270,14 @@ def emit(name, svg_path, labels, entries, tiles, amap):
            '// Palette index of each part and shading entry (light a part by writing its entries:',
            '// <part>, <part>_HI, <part>_LO; the LED status is LED plus LED_GLOW1/2)', f'enum {name}_part {{']
     hdr += [f'    {up}_{c_ident(pid)} = {i},' for i, (pid, _) in enumerate(entries, 1)]
-    hdr += ['};', '',
-            f'extern const u32 {name}_tiles[{len(tiles) * 16}];   // copy to a charblock',
+    hdr += ['};', '']
+    if boxes:
+        hdr.append('// Pixel bounding box of each part in the picture (inclusive)')
+        for pid, (x0, y0, x1, y1) in boxes.items():
+            p = f'{up}_{c_ident(pid)}'
+            hdr.append(f'#define {p}_X0 {x0}\n#define {p}_Y0 {y0}\n#define {p}_X1 {x1}\n#define {p}_Y1 {y1}')
+        hdr.append('')
+    hdr += [f'extern const u32 {name}_tiles[{len(tiles) * 16}];   // copy to a charblock',
             f'extern const u32 {name}_map[{MAP_TILES * MAP_TILES // 4}];     // 32x32 bytes; copy to a screenblock',
             f'extern const u16 {name}_pal[{len(pal)}];     // default (preview) colours; padded to whole words', '', '#endif', '']
 
@@ -297,12 +317,13 @@ def main(argv=None):
     svg = open(a.svg).read()
     try:
         labels, parts = label_map(svg, a.width)
+        boxes = part_boxes(labels, parts)
         labels, entries = shade(labels, parts, part_attrs(svg), class_colours(svg))
         tiles, amap = tiles_and_map(labels)
     except (ValueError, subprocess.CalledProcessError) as e:
         print(f'svg_to_gba: {e}', file=sys.stderr)
         return 1
-    hdr, src, pal = emit(a.name, a.svg, labels, entries, tiles, amap)
+    hdr, src, pal = emit(a.name, a.svg, labels, entries, tiles, amap, boxes)
     os.makedirs(a.outdir, exist_ok=True)
     for ext, text in (('h', hdr), ('c', src)):
         with open(os.path.join(a.outdir, f'{a.name}.{ext}'), 'w') as f:

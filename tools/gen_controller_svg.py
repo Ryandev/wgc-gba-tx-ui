@@ -36,6 +36,7 @@ SHELL_POCKETS = {
 }
 # Owner decision (2026-11-14): the top oval is centred vertically between the shell's top edge and
 # the top of the lens, on the centre line (the CAD has it 1.2 mm lower).
+STRIKE_W = 1.25   # mm: the mockups' 2 px line
 DPAD_ARM = 5.75   # width of each arm of the cross (CAD lib/part/dpad.py ARM_WIDTH)
 
 # Pixel shading, as in the approved mockups (mockups/make_mockups_cad.py); svg_to_gba.py applies it
@@ -50,7 +51,8 @@ SHADE = {
 }
 
 CSS = ('.body{fill:#5040a8}.shoulder{fill:#382c80}.trim{fill:#40349a}.lens{fill:#202030}'
-       '.lcd{fill:#b0d890}.button{fill:#3c3c4c}.plate{fill:#3c3090}.slot{fill:#281c60}.led{fill:#58e070}')
+       '.lcd{fill:#b0d890}.button{fill:#3c3c4c}.plate{fill:#3c3090}.slot{fill:#281c60}.led{fill:#58e070}'
+       '.strike{fill:#382c80}')   # strike = shoulder colour: invisible until the ROM lights it
 
 
 # ---- geometry helpers (CAD frame) ----------------------------------------------------------
@@ -116,6 +118,21 @@ def dpad_parts(outline):
     }
 
 
+def strike_poly(shoulder):
+    """The strike line across a shoulder, as a thin rectangle clipped to the shoulder's outline."""
+    xs, ys = [p[0] for p in shoulder], [p[1] for p in shoulder]
+    (x0, y0), (x1, y1) = (min(xs) + 6.2, max(ys) - 5.6), (max(xs) - 6.2, max(ys) - 1.25)
+    length = math.hypot(x1 - x0, y1 - y0)
+    ux, uy = (x1 - x0) / length, (y1 - y0) / length   # along the line
+    nx, ny = -uy, ux                                     # across it
+    cx, cy, half = (x0 + x1) / 2, (y0 + y1) / 2, STRIKE_W / 2
+    poly = shoulder   # keep a*x + b*y + c >= 0 for each side of the rectangle
+    for a, b, c in ((ux, uy, -(ux * x0 + uy * y0)), (-ux, -uy, ux * x1 + uy * y1),
+                    (nx, ny, -(nx * cx + ny * cy) + half), (-nx, -ny, nx * cx + ny * cy + half)):
+        poly = clip(poly, a, b, c)
+    return poly
+
+
 def top_y(poly, x):
     """Highest y where the polygon's outline crosses the vertical line at x."""
     ys = [y1 + (x - x1) * (y2 - y1) / (x2 - x1)
@@ -142,6 +159,12 @@ def build(trace=None):
     # behind the shell: only the rims that stick out past it show
     for side in ('l', 'r'):
         add(f'shoulder-{side}', 'shoulder', t[f'shoulder-{side}'])
+    # GB-mode strike-through (SPEC §C, mockups 17/18): a thin line across each shoulder, clipped to
+    # the shoulder's outline and drawn before the body, so it only ever covers visible shoulder.
+    # Same line as the mockups: from (x0 + 6.2, top - 5.6) to (x1 - 6.2, top - 1.25) mm of the
+    # shoulder's box (10/9/2 px there).
+    for side in ('l', 'r'):
+        add(f'strike-{side}', 'strike', strike_poly(t[f'shoulder-{side}']))
     for side in ('l', 'r'):
         add(f'trim-{side}', 'trim', t[f'trim-{side}'])
     add('body', 'body', t['body'])
@@ -180,6 +203,10 @@ def build(trace=None):
         a = dict(SHADE.get(role, {}))
         if pid == 'dpad-centre':
             a = {}   # never lit and never on the cross's edge: no shade entries of its own (F7)
+        if pid.startswith('strike-'):
+            # part of its shoulder: the shoulder's edges ignore it, and on an edge pixel the
+            # shoulder's highlight/shadow wins over the strike (svg_to_gba.py data-over)
+            a['data-group'] = a['data-over'] = 'shoulder-' + pid[-1]
         if pid.startswith('dpad-'):
             a['data-group'] = 'dpad'   # the cross shades as one piece; each arm keeps its own entries
         return ''.join(f' {k}="{v}"' for k, v in a.items())

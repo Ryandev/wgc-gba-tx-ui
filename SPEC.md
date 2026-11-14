@@ -132,6 +132,12 @@ countdown bar. It all hides after about 3 s from the last L/R press. See `mockup
 - Real link quality: the receiver LED (solid = OK, flicker/dim = loss), or the Pi monitor (Z).
 - *Accept:* each state shows the right LED colour and note in the harness. Normal play = green and
   a blank LCD.
+- **Built (Phase 1 chunk 2):** `src/core/notes.c` (timers, caveats), `src/core/lcd.c` (text and bar
+  into a 4bpp canvas), shown on a BG0 layer over the drawn LCD (`screen_main.c`). The strike lines
+  are parts of the drawing (`strike-l/r`, clipped to the shoulders) lit by palette like everything
+  else. A note is rendered with the layer hidden and appears 1–2 frames after the L/R press. The
+  key-held warning is built in but off (`-DHELD_WARN_SECS=60` turns it on); it has unit tests but no
+  screenshot, since default builds can't show it.
 
 ### D. ~~Status bar~~ → info lives in Settings / Stats (S)
 - Channel, address, mode, protocol and ROM version are **not** on the main screen any more.
