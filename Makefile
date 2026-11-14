@@ -5,6 +5,9 @@
 #   make PROTOCOL=V11B    ROM for v1.1b (2023+) carts
 #   make test             run the ROM headless in mGBA and compare cart writes with the stock ROM
 #   make run              open the ROM in mgba-qt
+#   make lint             gcc -fanalyzer + clang-tidy + cppcheck
+#   make check            format-check + lint + test-all (what CI and the pre-push hook run)
+#   make hooks            enable the repo's git hooks (.githooks/pre-push)
 
 PROTOCOL ?= V11A
 NAME     := wgc-gba-tx-ui
@@ -17,7 +20,12 @@ CC       := arm-none-eabi-gcc
 AR       := arm-none-eabi-ar
 OBJCOPY  := arm-none-eabi-objcopy
 ARCH     := -mcpu=arm7tdmi -mthumb-interwork
-CFLAGS   := $(ARCH) -O2 -Wall -Wextra -ffunction-sections -fdata-sections -I$(TONC)/include -DPROTOCOL_$(PROTOCOL)
+# Strict warnings on our code (ENGINEERING.md §2 layer 1); libtonc headers are -isystem so
+# third-party code doesn't trip them.
+WARN     := -Wall -Wextra -Wshadow -Wconversion -Wsign-conversion -Wcast-align -Wstrict-prototypes \
+            -Wmissing-prototypes -Wundef -Wdouble-promotion -Wvla -Wformat=2 -Wnull-dereference -Werror
+CFLAGS   := $(ARCH) -O2 -std=gnu17 $(WARN) -ffunction-sections -fdata-sections -isystem $(TONC)/include \
+            -DPROTOCOL_$(PROTOCOL)
 GCCLIB   := $(dir $(shell $(CC) -mcpu=arm7tdmi -mthumb -print-libgcc-file-name))
 LDFLAGS  := $(ARCH) -mthumb -nostartfiles -T ld/gba_cart.ld -Wl,--gc-sections \
             -Wl,--no-warn-rwx-segments -Wl,-Map,$(B)/$(NAME).map
@@ -26,7 +34,7 @@ SRC_C    := $(wildcard src/*.c)
 SRC_S    := $(wildcard src/*.s)
 OBJS     := $(SRC_C:src/%.c=$(B)/obj/%.o) $(SRC_S:src/%.s=$(B)/obj/%.o)
 
-.PHONY: all deps test test-v11b test-all baselines run clean
+.PHONY: all deps test test-v11b test-all baselines lint format format-check check hooks run clean
 all: $(B)/$(NAME).gba
 
 # ---- third-party: fetched at pinned commits, built here ------------------------------------
@@ -95,6 +103,39 @@ test-all: test test-v11b
 baselines: $(B)/emu_harness
 	python3 tests/record_baselines.py $(B)/emu_harness reference/stock-rom/GBA_TX_Cart_ROM_v1.1a.gba \
 	  reference/stock-rom/GBA_TX_Cart_ROM_v1.1b.gba
+
+# ---- static analysis / style (ENGINEERING.md §2) ------------------------------------------
+LINT_SRC  := $(SRC_C)
+LINT_DEFS := -DPROTOCOL_$(PROTOCOL)
+TIDY_ARGS := --target=armv4t-none-eabi -mthumb -std=gnu17 -isystem $(TONC)/include -isystem /usr/include/newlib $(LINT_DEFS)
+FMT_SRC   := $(wildcard src/*.c src/*.h) tools/emu_harness.c
+
+lint: $(DEPS)/.stamp
+	@echo "lint: gcc -fanalyzer"
+	@# -Wno-analyzer-use-of-uninitialized-value: GCC 13 false positive on memcpy from a fully
+	@# string-initialised char array (main.c at()/buf, checked by hand 2026-11-14). ENGINEERING.md §2.
+	@for f in $(LINT_SRC); do $(CC) $(ARCH) -mthumb -O2 -std=gnu17 $(WARN) -fanalyzer \
+	  -Wno-analyzer-use-of-uninitialized-value -isystem $(TONC)/include \
+	  $(LINT_DEFS) -c $$f -o /dev/null || exit 1; done
+	@echo "lint: clang-tidy"
+	@clang-tidy --quiet $(LINT_SRC) -- $(TIDY_ARGS)
+	@echo "lint: cppcheck"
+	@cppcheck -q --std=c11 --enable=warning,style,performance,portability --inline-suppr --error-exitcode=1 \
+	  --suppress=missingIncludeSystem --suppress='*:$(DEPS)/*' $(LINT_DEFS) -I src -I $(TONC)/include src/
+	@echo "lint: OK"
+
+format:
+	clang-format -i $(FMT_SRC)
+
+format-check:
+	@clang-format --dry-run --Werror $(FMT_SRC) && echo "format: OK"
+
+# Everything CI and the pre-push hook run
+check: format-check lint test-all
+
+# Use the repo's git hooks (pre-push runs `make check`)
+hooks:
+	git config core.hooksPath .githooks && echo "hooks: core.hooksPath = .githooks"
 
 run: $(B)/$(NAME).gba
 	/usr/games/mgba-qt $< &

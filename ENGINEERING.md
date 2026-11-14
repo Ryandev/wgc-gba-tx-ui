@@ -1,6 +1,8 @@
 # Engineering practices: C on the GBA, linting, testing
 
-Status: **proposal for discussion (2026-11-14).** Sections marked *(adopted)* are already rules.
+Status (2026-11-14): **§1 and §2 adopted** (owner: layered linting rather than full MISRA). `make lint`,
+`make check`, CI on every push, and a pre-push hook are in place. §3 to §5 are agreed direction:
+host unit tests, mutation testing and golden-image tests get built in Phase 1.
 Performance is a core requirement: see SPEC.md §0 rule 7.
 
 ---
@@ -83,6 +85,8 @@ fixed-width types for storage; no implicit narrowing conversions; no recursion; 
 - integer-to-pointer casts for memory-mapped registers (MISRA 11.4/11.6) via libtonc macros
 - inline assembly / `.s` files (Dir 4.3) for `link_write.s` and libtonc
 - libtonc and devkitPro crt0 are third-party and excluded from linting
+- `-Wanalyzer-use-of-uninitialized-value` is off: a GCC 13 false positive on `memcpy` from a fully
+  string-initialised array (main.c, checked by hand). Revisit on a newer GCC.
 
 ---
 

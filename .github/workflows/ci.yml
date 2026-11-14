@@ -1,0 +1,29 @@
+name: ci
+on:
+  push:
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04   # same Ubuntu packages as the dev machine (GCC 13.2, newlib, mGBA 0.10)
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends gcc-arm-none-eabi binutils-arm-none-eabi \
+            libnewlib-arm-none-eabi build-essential git libmgba-dev cppcheck clang-tidy clang-format
+      - name: Cache pinned dependencies
+        uses: actions/cache@v4
+        with:
+          path: build/deps
+          key: deps-${{ hashFiles('scripts/fetch_deps.sh') }}
+      - name: make check (format, lint, protocol + timing tests v1.1a/v1.1b)
+        run: make check
+      - name: Upload ROMs
+        uses: actions/upload-artifact@v4
+        with:
+          name: roms
+          path: |
+            build/wgc-gba-tx-ui.gba
+            build/v11b/wgc-gba-tx-ui.gba

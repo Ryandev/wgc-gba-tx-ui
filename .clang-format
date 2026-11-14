@@ -1,0 +1,15 @@
+# ENGINEERING.md §2 layer 6. Matches the existing code: 4-space indent, K&R-ish, 110 columns.
+BasedOnStyle: LLVM
+IndentWidth: 4
+ColumnLimit: 110
+BreakBeforeBraces: Custom
+BraceWrapping:
+  AfterFunction: true
+AllowShortFunctionsOnASingleLine: All
+AllowShortIfStatementsOnASingleLine: WithoutElse
+AllowShortLoopsOnASingleLine: true
+AlignConsecutiveMacros: AcrossComments
+AlignTrailingComments: true
+SpaceBeforeParens: ControlStatements
+PointerAlignment: Right
+SortIncludes: Never

@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Runs the same checks as CI before anything leaves this machine. Enable with: make hooks
+# Skip once (e.g. a docs-only push while tools are missing): git push --no-verify
+set -euo pipefail
+cd "$(git rev-parse --show-toplevel)"
+echo "pre-push: make check (format, lint, protocol + timing tests for v1.1a and v1.1b)"
+if ! make --no-print-directory -s check; then
+    echo "pre-push: FAILED - push aborted. Fix it, or 'git push --no-verify' to override."
+    exit 1
+fi

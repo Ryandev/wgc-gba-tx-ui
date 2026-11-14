@@ -17,9 +17,13 @@ breaking the wireless link.
 make                 # ROM for v1.1a carts -> build/wgc-gba-tx-ui.gba   (PROTOCOL=V11B for 2023+ carts)
 make test            # headless mGBA: compare cart writes with the stock ROM recordings
 make run             # open in mgba-qt
+make lint            # gcc -fanalyzer + clang-tidy + cppcheck
+make check           # format-check + lint + v1.1a/v1.1b protocol & timing tests (CI + pre-push hook)
+make hooks           # once per clone: pushes run `make check` first
 ```
 Needs Ubuntu packages `gcc-arm-none-eabi binutils-arm-none-eabi libnewlib-arm-none-eabi build-essential git`
-(+ `libmgba-dev` for tests, `mgba-qt` to play). libtonc, the GBA crt0 and gbafix are fetched from
+(+ `libmgba-dev` for tests, `cppcheck clang-tidy clang-format` for lint, `mgba-qt` to play).
+CI (`.github/workflows/ci.yml`) runs `make check` on every push and PR on Ubuntu 24.04. libtonc, the GBA crt0 and gbafix are fetched from
 GitHub at pinned commits by `scripts/fetch_deps.sh`.
 
 ## Layout
