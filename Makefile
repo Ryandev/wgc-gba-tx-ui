@@ -208,7 +208,7 @@ coverage: unit
 # ---- mutation testing (ENGINEERING.md §4) ---------------------------------------------------
 # Mutates src/link.c + src/core/*.c, rebuilds the real ARM ROM per mutant, and runs unit tests
 # (both protocols) + the v1.1a emulator suite. Fails if any mutant survives. ~4-6 min.
-MUTATE_SRC ?= src/link.c src/main.c $(CORE_SRC) src/core/keyword.h   # reviews: pairing.c, main.c, keyword.h were missed
+MUTATE_SRC ?= src/link.c src/main.c src/screen_main.c $(CORE_SRC) src/core/keyword.h   # reviews: pairing.c, main.c, keyword.h were missed
 mutate: $(B)/emu_harness $(DEPS)/.stamp
 	python3 tests/mutate.py $(MUTATE_SRC)
 

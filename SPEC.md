@@ -81,6 +81,10 @@ Phase = build order (see §2).
   no tile or map traffic; ENGINEERING.md §6).
 - *Accept:* every one of the 10 buttons lights within 1 frame of press, and chords (e.g. L+R+A+Up)
   show correctly.
+- **Built (Phase 1 chunk 1):** `src/screen_main.c` + `src/core/view.c`. Lit = the mockups' cyan
+  (fill/highlight/shadow), release fade 6 frames (100 ms), LED green, amber in GB mode, where L/R
+  light amber flat. Lights from `link_last_word`, the word the IRQ actually sent (X/Y bits light
+  nothing extra). Goldens `dpad`, `chords`, `gb_mode`, `fade`; timing unchanged (gap 2.00 ms).
 
 ### B. Theme and boot splash (Phase 1 splash, revised 2026-11-14)
 **Splash storyboard** (`mockups/31_splash_storyboard_v2.png`). Chosen: the v2 frames (fade-in with LED off = `29_*`). It's original, with no imitation

@@ -1,11 +1,12 @@
 // wgc-gba-tx-ui: hardware layer for boot, screens and the pairing menu.
 // Logic lives in core/ (host-tested); this file reads keys, draws, and calls the link layer.
-// Phase 0 screen: minimal text. The real UI comes in Phase 1.
+// Main screen: the controller view (screen_main.c). Boot-time Settings is still Phase 0 text.
 #include <string.h>
 #include <tonc.h>
 #include "assets.h"
 #include "link.h"
 #include "protocol.h"
+#include "screen_main.h"
 #include "core/boot.h"
 #include "core/keyword.h"
 #include "core/pairing.h"
@@ -98,28 +99,24 @@ int main(void)
     } else if (plan.screen == SCREEN_OFF) {
         REG_DISPCNT = DCNT_MODE0; // screen "off": plain backdrop, nothing drawn
         pal_bg_mem[0] = RGB15(8, 8, 8);
-    } else {
+    } else if (plan.settings) {
         text_init();
         at(0, "WGC-GBA-TX-UI " VERSION);
         at(1, "PROTOCOL " PROTO_NAME);
-        if (plan.settings) pairing_menu(); // never returns
+        pairing_menu(); // never returns
+    } else {
+        screen_main_init(); // bulk VRAM load, before any key traffic (SPEC §0 rule 7)
     }
 
     link_sync();
-    if (plan.gb_mode) { // GB mode: no L/R
-        link_gb_mode();
-        if (plan.screen == SCREEN_NORMAL) at(2, "GB MODE");
-    }
+    if (plan.gb_mode) link_gb_mode(); // GB mode: no L/R (the LED shows amber)
 
     link_start();
-    u32 last = 0;            // mutate: equivalent[0 -> 1] (only decides when the first redraw happens)
-    char buf[] = "KEYS 000"; // fully initialised; fmt_hex3() overwrites the 3 digits
+    view_state view;
+    view_init(&view);
     for (;;) {
         VBlankIntrWait();
-        if (plan.screen == SCREEN_NORMAL && link_packets != last) {
-            last = link_packets;
-            fmt_hex3(buf + 5, link_last_word);
-            at(4, buf);
-        }
+        // Palette writes only, at the start of VBlank, from the word the send IRQ last sent
+        if (plan.screen == SCREEN_NORMAL) screen_main_frame(&view, link_last_word, plan.gb_mode);
     }
 }

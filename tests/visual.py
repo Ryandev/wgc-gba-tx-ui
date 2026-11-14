@@ -19,13 +19,17 @@ SCREENS = {
     'boot':    ['f:30', 'p:idle'],
     # each D-pad direction captured on its own (chunk3 F1: a single final shot only checked Right)
     'dpad':    ['f:30', 'k:^', 'f:3', 'p:up', 'k:v', 'f:3', 'p:down', 'k:<', 'f:3', 'p:left', 'k:>', 'f:3', 'p:right'],
-    # chords chosen so the hex readout shows every digit 0-F (chunk3 F1)
+    # chords: every button in several combinations (chosen in Phase 0 so the hex readout showed 0-F)
     'chords':  ['f:30', 'k:lrA', 'f:3', 'p:lra', 'k:lrAB', 'f:3', 'p:lrab', 'k:sSB', 'f:3', 'p:ssb',
                 'k:Av<s', 'f:3', 'p:a_down_left_sel', 'k:r^<S', 'f:3', 'p:r_up_left_start',
                 'k:B>v', 'f:3', 'p:b_right_down', 'k:A>', 'f:3', 'p:hex5', 'k:B<', 'f:3', 'p:hexA',
                 'k:AB<', 'f:3', 'p:hexB', 'k:A><', 'f:3', 'p:hexD', 'k:B><', 'f:3', 'p:hexE', 'k:^v<>', 'f:3', 'p:hex3C',
                 'k:-', 'f:3', 'p:released'],
-    'gb_mode': ['k:A', 'f:30', 'k:-', 'f:3', 'p:shown'],
+    # GB mode: amber LED; L/R pressed light amber (pressed but not sent), then fade back
+    'gb_mode': ['k:A', 'f:30', 'k:-', 'f:3', 'p:shown', 'k:l', 'f:3', 'p:l_amber', 'k:r', 'f:3', 'p:r_amber',
+                'k:-', 'f:3', 'p:r_fading', 'f:6', 'p:faded'],
+    # release fade: mid-fade, then fully back after VIEW_FADE_FRAMES (must equal boot__idle)
+    'fade':    ['f:30', 'k:A', 'f:3', 'k:-', 'f:3', 'p:a_half', 'f:6', 'p:a_gone'],
     'off':     ['k:s', 'f:30', 'p:grey'],
     # frame 9 = first frame after startup; frames 1-7 are white in stock too (crt0 clears RAM under forced
     # blank before main), so they're not a useful golden (see SPEC.md, boot flash note)
