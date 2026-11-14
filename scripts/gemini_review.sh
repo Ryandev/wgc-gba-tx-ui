@@ -12,6 +12,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 BRIEF="${1:?usage: scripts/gemini_review.sh <brief.md>}"
+BRIEF="$(realpath --relative-to="$ROOT" "$BRIEF")"
 [ -f "$BRIEF" ] || { echo "no such brief: $BRIEF"; exit 2; }
 TAG="$(basename "$BRIEF" .md)"
 OUT="$ROOT/.reviews/$TAG"
@@ -20,22 +21,27 @@ MODEL="${GEMINI_REVIEW_MODEL:-gemini-4-argon-high}"
 TIMEOUT="${GEMINI_REVIEW_TIMEOUT:-40m}"
 mkdir -p "$OUT"
 
-before="$(git status --porcelain --untracked-files=no; git rev-parse HEAD)"
-echo "review: $TAG  model=$MODEL  timeout=$TIMEOUT  -> $OUT"
+# Review a snapshot, not the live tree: a git worktree of HEAD, so Claude (or the owner) can keep
+# working while the review runs, and any edit Gemini makes can't touch real files. Git-ignored
+# local material (reference/, mockups/, build/) is symlinked in so Gemini can still read it.
+SNAP="$ROOT/.reviews/.snapshot-$TAG"
+git worktree remove --force "$SNAP" 2>/dev/null || true
+git worktree add --detach -q "$SNAP" HEAD
+for d in reference mockups build; do [ -e "$ROOT/$d" ] && ln -s "$ROOT/$d" "$SNAP/$d"; done
+echo "review: snapshot of $(git rev-parse --short HEAD) at $SNAP"
 
 set +e
-command agy --model "$MODEL" --mode plan --dangerously-skip-permissions \
+(cd "$SNAP" && command agy --model "$MODEL" --mode plan --dangerously-skip-permissions \
     --output-format json --json-schema "$SCHEMA" --print-timeout "$TIMEOUT" \
-    -p "$(cat "$BRIEF")" > "$OUT/reply.json" 2> "$OUT/stderr.txt"
+    -p "$(cat "$ROOT/$BRIEF")") > "$OUT/reply.json" 2> "$OUT/stderr.txt"
 rc=$?
 set -e
 
-after="$(git status --porcelain --untracked-files=no; git rev-parse HEAD)"
-if [ "$before" != "$after" ]; then
-    echo "review: REJECTED - tracked files changed during a read-only review:"
-    git status --short --untracked-files=no
-    echo "        inspect with git diff; restore with git checkout -- <files>"
-    exit 4
+changed="$(git -C "$SNAP" status --porcelain --untracked-files=no)"
+git worktree remove --force "$SNAP"
+if [ -n "$changed" ]; then
+    echo "review: WARNING - Gemini modified files in the snapshot (discarded; real tree untouched):"
+    echo "$changed"
 fi
 
 python3 - "$OUT/reply.json" "$OUT/findings.md" "$OUT/conversation" <<'EOF'

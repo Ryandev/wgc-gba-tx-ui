@@ -43,7 +43,8 @@ Into `.reviews/briefs/<tag>.md` (git-ignored). A brief that works has:
 
 Run it with `run_in_background: true`. It takes minutes, and the harness re-invokes Claude when
 it exits. It writes `.reviews/<tag>/` with `reply.json`, `findings.md` and `log.md`, uses a fresh
-agy conversation per tag, and fails if the working tree changed.
+agy conversation per tag, and reviews a **git-worktree snapshot of HEAD** (commit first). Edits
+during the run, yours or Gemini's, can't collide; Gemini's edits are discarded and reported.
 Env: `GEMINI_REVIEW_MODEL` (default `gemini-4-argon-high`), `GEMINI_REVIEW_TIMEOUT` (default `40m`).
 
 ## 3. Verify every finding (don't relay it raw)
