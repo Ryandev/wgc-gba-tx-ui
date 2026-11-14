@@ -32,7 +32,13 @@ SCREENS = {
     # GB mode: quiet (amber LED only) until L/R; then L/R light amber (pressed but not sent), the other
     # is struck through and the LCD note counts down 3 s from the last L/R press, then all hides
     'gb_mode': ['k:A', 'f:30', 'k:-', 'f:7', 'p:shown', 'k:l', 'f:7', 'p:l_amber', 'k:r', 'f:7', 'p:r_amber',
-                'k:-', 'f:3', 'p:r_fading', 'f:4', 'p:faded', 'f:76', 'p:note_half', 'f:100', 'p:note_gone'],
+                'k:-', 'f:3', 'p:r_fading', 'f:4', 'p:faded', 'f:83', 'p:note_half', 'f:88', 'p:note_last',
+                'f:4', 'p:note_gone'],
+    # frames counted from the last L/R release (phase1-chunk2 F4): note_half at 90, note_last at 178 (still
+    # shown: the timer runs from the release), note_gone at 182.
+    # A button pressed while a note renders still lights at once (phase1-chunk2 F1: the old per-pixel
+    # render took over a frame and B lit one frame late). Same timing as dpad's press-to-capture.
+    'note_render': ['k:A', 'f:30', 'k:-', 'f:7', 'k:l', 'f:1', 'k:lB', 'f:2', 'p:b_lit'],
     # release fade: 6 steps (VIEW_FADE_FRAMES), seen one frame after the release (the release reaches
     # the sent word within 2 ms; the palette is written at the next VBlank). So: half way at 3 frames,
     # the last faint step at 6, exactly back to boot__idle at 7. A longer fade fails a_gone.

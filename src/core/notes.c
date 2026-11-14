@@ -7,12 +7,12 @@ void notes_init(notes_state *n, bool gb_mode, uint32_t held_limit)
     n->held_limit = held_limit;
     n->held = 0;
     n->last_word = 0;
-    for (int i = 0; i < 3; i++) n->timer[i] = 0;
+    for (int i = 0; i < NOTE_COUNT; i++) n->timer[i] = 0;
 }
 
 void notes_step(notes_state *n, uint16_t word)
 {
-    for (int i = 0; i < 3; i++) {
+    for (int i = NOTE_GB_MODE; i < NOTE_COUNT; i++) { // NOTE_NONE has no timer of its own
         if (n->timer[i] > 0) n->timer[i]--;
     }
     if (n->gb_mode && (word & (W_L | W_R))) n->timer[NOTE_GB_MODE] = NOTE_FRAMES;

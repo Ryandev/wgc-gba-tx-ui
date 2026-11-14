@@ -39,6 +39,11 @@ SCENARIOS = {
     '08_each_button': dict(ours=['f:30'] + [st for k in ['A', 'B', 's', 'S', '>', '<', '^', 'v', 'r', 'l']
                                             for st in (f'k:{k}', 'f:4', 'k:-', 'f:4')],
                            note='every button alone (mutation testing found Left was never exercised)'),
+    # GB mode with L/R pressed: the LCD note renders, counts down and hides while keys keep moving, so
+    # SPEC §0 rule 7 (gap, press-to-send) is checked with the heaviest UI work running (phase1-chunk2 F1)
+    '09_gbmode_lr':  dict(ours=['k:A', 'f:60', 'k:-', 'f:5', 'k:l', 'f:2', 'k:lB', 'f:3', 'k:-', 'f:3', 'k:r', 'f:5',
+                                'k:rA', 'f:3', 'k:-', 'f:200', 'k:^', 'f:3', 'k:-', 'f:5'],
+                          note='GB mode, L/R tapped: note render + countdown + hide during key traffic'),
     '07_xy':         dict(ours=['f:30', 'k:lrA', 'f:5', 'k:lrB', 'f:5', 'k:lrAB', 'f:5', 'k:-', 'f:5'],
                           note='L+R+A/B -> X/Y on v1.1b; plain L+R+A/B on v1.1a'),
 }

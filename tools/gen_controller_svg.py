@@ -118,10 +118,18 @@ def dpad_parts(outline):
     }
 
 
-def strike_poly(shoulder):
-    """The strike line across a shoulder, as a thin rectangle clipped to the shoulder's outline."""
+def strike_poly(shoulder, mirrored=False):
+    """The strike line across a shoulder, as a thin rectangle clipped to the shoulder's outline.
+
+    The left shoulder's line rises towards the middle like the shoulder's own edge ("/"); the right
+    one is its mirror image ("\\"), so it also runs along its visible rim. Review phase1-chunk2 F3:
+    the mockups' "/" on the right shoulder was mostly hidden by the body, a 10 x 3 px stub.
+    """
     xs, ys = [p[0] for p in shoulder], [p[1] for p in shoulder]
-    (x0, y0), (x1, y1) = (min(xs) + 6.2, max(ys) - 5.6), (max(xs) - 6.2, max(ys) - 1.25)
+    low, high = max(ys) - 5.6, max(ys) - 1.25
+    if mirrored:
+        low, high = high, low
+    (x0, y0), (x1, y1) = (min(xs) + 6.2, low), (max(xs) - 6.2, high)
     length = math.hypot(x1 - x0, y1 - y0)
     ux, uy = (x1 - x0) / length, (y1 - y0) / length   # along the line
     nx, ny = -uy, ux                                     # across it
@@ -164,7 +172,7 @@ def build(trace=None):
     # Same line as the mockups: from (x0 + 6.2, top - 5.6) to (x1 - 6.2, top - 1.25) mm of the
     # shoulder's box (10/9/2 px there).
     for side in ('l', 'r'):
-        add(f'strike-{side}', 'strike', strike_poly(t[f'shoulder-{side}']))
+        add(f'strike-{side}', 'strike', strike_poly(t[f'shoulder-{side}'], mirrored=side == 'r'))
     for side in ('l', 'r'):
         add(f'trim-{side}', 'trim', t[f'trim-{side}'])
     add('body', 'body', t['body'])

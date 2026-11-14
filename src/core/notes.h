@@ -11,14 +11,14 @@
 
 #define NOTE_FRAMES 180 // 3 s at 60 fps
 
-typedef enum { NOTE_NONE, NOTE_GB_MODE, NOTE_KEY_HELD } note_id;
+typedef enum { NOTE_NONE, NOTE_GB_MODE, NOTE_KEY_HELD, NOTE_COUNT } note_id;
 
 typedef struct {
     bool gb_mode;
     uint32_t held_limit; // frames; 0 = key-held warning off (the default, SPEC §C)
     uint32_t held;       // frames the current key word has been held unchanged
     uint16_t last_word;
-    uint16_t timer[3]; // frames left for each note (indexed by note_id)
+    uint16_t timer[NOTE_COUNT]; // frames left for each note (indexed by note_id; NONE stays 0)
 } notes_state;
 
 void notes_init(notes_state *n, bool gb_mode, uint32_t held_limit);

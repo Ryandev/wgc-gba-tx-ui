@@ -206,6 +206,11 @@ Sources are committed; everything the ROM uses is generated at build time into `
 - Both tools are deterministic and tested (`tests/test_tools.py`, `make tools-test`, in `make check`).
   Needs `python3-pil` and `librsvg2-bin`.
 
+**Phase 1 chunk 2 (2026-11-14):** 434/466 on the first run. Real gaps: `lcd_pixel` could write a row
+past the canvas, the bar's tile-row maths only worked for today's LCD height, and timers were never
+checked straight after init. All fixed with tests; `lcd.c` then 134/134. Two map-clear mutants are
+*accepted* (invisible with today's notes and no sprites, stated in place).
+
 **Colour-only captures.** A capture named `*_colours` (e.g. `pairing__frame7_colours`) is compared by
 the set of colours it contains, not pixel by pixel. It's for boot transition frames, where the
 scanline at which startup finishes moves with code size, but what matters is that no garbage

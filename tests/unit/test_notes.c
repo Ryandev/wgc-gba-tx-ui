@@ -14,6 +14,37 @@ static void steps(uint16_t word, int frames)
     for (int i = 0; i < frames; i++) notes_step(&n, word);
 }
 
+static void test_init_from_garbage(void)
+{
+    memset(&n, 0xFF, sizeof n); // real RAM isn't zeroed
+    notes_init(&n, true, 1);
+    TEST_ASSERT_EQUAL(NOTE_NONE, notes_current(&n));
+    TEST_ASSERT_EQUAL_UINT(0, notes_left(&n));
+    TEST_ASSERT_FALSE(notes_strike(&n));
+    TEST_ASSERT_FALSE(notes_key_held(&n)); // even with a 1-frame limit, nothing is held yet
+    for (int i = 0; i < NOTE_COUNT; i++) TEST_ASSERT_EQUAL_UINT16(0, n.timer[i]);
+}
+
+static void test_one_frame_limit_works(void)
+{
+    notes_init(&n, false, 1);
+    steps(W_A, 1);
+    TEST_ASSERT_FALSE(notes_key_held(&n));
+    steps(W_A, 1);
+    TEST_ASSERT_TRUE(notes_key_held(&n));
+}
+
+static void test_key_held_note_shows_to_its_last_frame(void)
+{
+    notes_init(&n, false, 5);
+    steps(W_A, 10);
+    steps(0, NOTE_FRAMES - 1);
+    TEST_ASSERT_EQUAL(NOTE_KEY_HELD, notes_current(&n));
+    TEST_ASSERT_EQUAL_UINT(1, notes_left(&n));
+    steps(0, 1);
+    TEST_ASSERT_EQUAL(NOTE_NONE, notes_current(&n));
+}
+
 static void test_normal_play_shows_nothing(void)
 {
     notes_init(&n, false, 0);
@@ -142,6 +173,9 @@ static void test_note_texts_fit_the_lcd(void)
 int main(void)
 {
     UNITY_BEGIN();
+    RUN_TEST(test_init_from_garbage);
+    RUN_TEST(test_one_frame_limit_works);
+    RUN_TEST(test_key_held_note_shows_to_its_last_frame);
     RUN_TEST(test_normal_play_shows_nothing);
     RUN_TEST(test_gb_mode_quiet_until_l_or_r);
     RUN_TEST(test_gb_mode_l_or_r_shows_note_and_strike);

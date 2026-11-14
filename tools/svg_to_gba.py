@@ -143,7 +143,8 @@ def shade(labels, parts, attrs, colours):
     fill = {pid: rgb for pid, rgb in entries}
     index = {pid: i for i, (pid, _) in enumerate(parts, 1)}
     pid_of = {i: pid for pid, i in index.items()}
-    group = {pid: attrs[pid].get('data-group', pid) for pid, _ in parts}
+    # an overlay (data-over) shares its part's group unless told otherwise (review phase1-chunk2 F5)
+    group = {pid: attrs[pid].get('data-group') or attrs[pid].get('data-over') or pid for pid, _ in parts}
 
     def new_entry(name, rgb):
         entries.append((name, rgb))

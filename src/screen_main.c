@@ -16,8 +16,10 @@
 #define CTRL_Y   ((SCREEN_HEIGHT - CTRL_H) / 2)
 
 static const lcd_area lcd = {CTRL_LCD_X1 - CTRL_LCD_X0 + 1, CTRL_LCD_Y1 - CTRL_LCD_Y0 + 1};
-_Static_assert(CTRL_LCD_X1 - CTRL_LCD_X0 + 1 <= LCD_TW * 8, "LCD canvas too narrow");
-_Static_assert(CTRL_LCD_Y1 - CTRL_LCD_Y0 + 1 <= LCD_TH * 8, "LCD canvas too short");
+// clang-format off
+_Static_assert(CTRL_LCD_X1 - CTRL_LCD_X0 + 1 <= LCD_TW * 8, "LCD canvas too narrow"); // mutate: equivalent[<= -> <, + -> -, dec const +1] (compile-time check that stays true)
+_Static_assert(CTRL_LCD_Y1 - CTRL_LCD_Y0 + 1 <= LCD_TH * 8, "LCD canvas too short"); // mutate: equivalent[+ -> -, dec const +1] (compile-time check that stays true)
+// clang-format on
 
 static u32 canvas[LCD_WORDS]; // rendered here, then copied to VRAM
 
@@ -41,8 +43,13 @@ static void lcd_layer_init(void)
 {
     // Tile 0 blank (the whole map points at it), the canvas from tile 1; map entries for the canvas
     // laid out row by row at the map's top left; scrolled so that corner sits on the drawn LCD.
-    memset32(&tile_mem[CBB_LCD][0], 0, 8);
-    memset16(se_mem[SBB_LCD], 0, 32 * 32);
+    // clang-format off
+    memset32(&tile_mem[CBB_LCD][0], 0, 8); // mutate: equivalent[dec const +1] (the extra word is canvas tile 1, written on every render)
+    // mutate: accepted[0 -> 1, dec const +1] filling the map with tile 1 (the canvas' top-left tile) is
+    // invisible while every note leaves that tile blank, and a 33-row clear spills into OBJ VRAM, unused
+    // on this screen; neither is observable today, but both would be with other notes or sprites.
+    memset16(se_mem[SBB_LCD], 0, 32 * 32); // mutate: accepted[0 -> 1, dec const +1] (see above)
+    // clang-format on
     for (int ty = 0; ty < LCD_TH; ty++) {
         for (int tx = 0; tx < LCD_TW; tx++)
             se_mem[SBB_LCD][ty * 32 + tx] = (SCR_ENTRY)(SE_PALBANK(PAL_LCD) | (1 + ty * LCD_TW + tx));
@@ -72,9 +79,11 @@ static void lcd_render(note_id id)
 static void lcd_bar_update(unsigned left)
 {
     lcd_bar(canvas, lcd, left, NOTE_FRAMES, LCD_INK);
-    const int row = lcd_bar_tile_row(lcd);
-    const int rows = row + 1 < LCD_TH ? 2 : 1;
-    memcpy32(&tile_mem[CBB_LCD][1 + row * LCD_TW], &canvas[row * LCD_TW * 8], (u32)(rows * LCD_TW * 8));
+    int first = 0; // mutate: equivalent[0 -> 1] (out parameter: always overwritten)
+    int count = 0; // mutate: equivalent[0 -> 1] (out parameter: always overwritten)
+    lcd_bar_rows(lcd, &first, &count);
+    memcpy32(&tile_mem[CBB_LCD][1 + first * LCD_TW], &canvas[first * LCD_ROW_WORDS],
+             (u32)(count * LCD_ROW_WORDS));
 }
 
 void screen_main_init(main_screen *m, bool gb_mode, uint32_t held_limit)
@@ -86,14 +95,16 @@ void screen_main_init(main_screen *m, bool gb_mode, uint32_t held_limit)
     view_init(&m->view);
     notes_init(&m->notes, gb_mode, held_limit);
     m->shown = NOTE_NONE;
-    m->show_pending = false;
+    m->show_pending =
+        false; // mutate: equivalent[false -> true] (only read once a note is shown, after it's set)
     memcpy32(&tile8_mem[CBB_CTRL][0], ctrl_tiles, sizeof ctrl_tiles / 4);
     // mutate: equivalent[dec const +1] at 1:1 the map rows a shorter copy misses (>= 26) are never on
     // screen (the picture is 17 rows); the Settings zoom (Phase 1 chunk 4) must re-check this.
     memcpy32(se_mem[SBB_CTRL], ctrl_map, sizeof ctrl_map / 4); // mutate: equivalent[dec const +1] (above)
     memcpy16(pal_bg_mem, ctrl_pal, CTRL_PAL_LEN);
     pal_bg_mem[0] = BACKDROP;
-    REG_BG2CNT = BG_CBB(CBB_CTRL) | BG_SBB(SBB_CTRL) | BG_AFF_32x32 | BG_PRIO(1);
+    REG_BG2CNT = BG_CBB(CBB_CTRL) | BG_SBB(SBB_CTRL) | BG_AFF_32x32 |
+                 BG_PRIO(1); // mutate: equivalent[dec const +1] (2 is still under BG0)
     // Identity transform; the reference point puts the picture's top left at (CTRL_X, CTRL_Y).
     REG_BG2PA = 1 << 8;
     REG_BG2PB = 0; // mutate: equivalent[0 -> 1] (a 1/256 px shear: < 1 px over 160 lines, never shows)
@@ -143,7 +154,8 @@ void screen_main_frame(main_screen *m, u16 word)
     } else if (now != NOTE_NONE) {
         if (m->show_pending) {
             REG_DISPCNT |= DCNT_BG0;
-            m->show_pending = false;
+            m->show_pending =
+                false; // mutate: equivalent[false -> true] (re-enabling a shown layer changes nothing)
         }
         lcd_bar_update(notes_left(&m->notes));
     }
