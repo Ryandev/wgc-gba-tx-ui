@@ -36,6 +36,10 @@ def analyse(writes, proto, end=None):
     i = 1
     if tuple(vals[1:3]) == proto['gb']: i = 3
     elif tuple(vals[1:3]) == proto['cfg']: i = 6
+    for k in range(i - 1):  # writes inside the preamble use the same write+delay routine (chunk1 F4)
+        dt = writes[k + 1][1] - writes[k][1]
+        if not MINPAIR <= dt <= PAIR:
+            errs.append(f'preamble spacing {dt / CPU_HZ * 1000:.3f} ms between writes {k} and {k + 1}')
     rest = writes[i:]
     if len(rest) % 2:
         # odd count: fine only if the last write is a hi half cut off by the end of the run
@@ -96,6 +100,8 @@ def main():
         s, o = analyse(s_w, proto, s_e), analyse(o_w, proto, o_e)
         probs = list(o['errs'])
         if o['pre'] != s['pre']: probs.append(f"preamble {fmt(o['pre'])} != stock {fmt(s['pre'])}")
+        if sc.get('sync_after_last_key') and o_w and o_k and o_w[0][1] < o_k[-2][1]:
+            probs.append('boot order: sync was sent before the final key press (SPEC §S: Settings sends nothing)')
         if collapsed(o['pairs']) != collapsed(s['pairs']):
             probs.append(f"pairs {collapsed(o['pairs'])} != stock {collapsed(s['pairs'])}")
         gap, lat, rate = timing(o['pairs'], o_k, proto)

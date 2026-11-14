@@ -24,7 +24,7 @@ make check           # format-check + lint + coverage + v1.1a/v1.1b protocol & t
 make hooks           # once per clone: pushes run `make check` first
 ```
 Needs Ubuntu packages `gcc-arm-none-eabi binutils-arm-none-eabi libnewlib-arm-none-eabi build-essential git`
-(+ `libmgba-dev` for tests, `cppcheck clang-tidy clang-format` for lint, `mgba-qt` to play).
+(+ `libmgba-dev` for tests, `cppcheck clang-tidy clang-format gcovr` for lint and coverage, `mgba-qt` to play).
 CI (`.github/workflows/ci.yml`) runs `make check` on every push and PR on Ubuntu 24.04. libtonc, the GBA crt0 and gbafix are fetched from
 GitHub at pinned commits by `scripts/fetch_deps.sh`.
 

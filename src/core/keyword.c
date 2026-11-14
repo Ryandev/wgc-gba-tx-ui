@@ -22,9 +22,6 @@ uint16_t kw_pack(uint16_t pressed, bool xy)
     return w;
 }
 
-uint16_t kw_hi(uint16_t word) { return (uint16_t)(word >> PROTO_SHIFT); }
-uint16_t kw_lo(uint16_t word) { return (uint16_t)(word & PROTO_LO_MASK); }
-
 void kw_config_bytes(uint8_t channel, uint8_t address, uint8_t packets, uint16_t out[5])
 {
     out[0] = PROTO_CFG1;

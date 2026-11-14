@@ -53,9 +53,9 @@ try:
 except ValueError:
     out.write("# reply (unparsed)\n\n" + raw); sys.exit(0)
 if d.get("conversation_id"): open(sys.argv[3], "w").write(d["conversation_id"] + "\n")
-resp = d.get("response", d)
+resp = d.get("structured_output") or d.get("response", d)
 if isinstance(resp, str):
-    try: resp = json.loads(resp[resp.index("{"):resp.rindex("}") + 1])
+    try: resp = json.loads(resp[resp.index('{"'):resp.rindex("}") + 1])  # skip progress chatter before the JSON
     except ValueError: out.write("# reply (text)\n\n" + resp); sys.exit(0)
 out.write(f"# Gemini review\n\nstatus: {d.get('status')}\n\n## Summary\n\n{resp.get('summary','')}\n\n## Findings\n\n")
 order = {"critical": 0, "high": 1, "medium": 2, "low": 3}

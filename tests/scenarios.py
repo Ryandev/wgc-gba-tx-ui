@@ -27,6 +27,7 @@ SCENARIOS = {
                           stock=['k:S', 'f:60', 'k:-', 'f:10', 'k:>', 'f:20', 'k:-', 'f:10', 'k:>', 'f:20', 'k:-',
                                  'f:10', 'k:v', 'f:20', 'k:-', 'f:10', 'k:v', 'f:20', 'k:-', 'f:10', 'k:A', 'f:20',
                                  'k:-', 'f:30'],
+                          sync_after_last_key=True,  # SPEC §S: boot-time Settings sends nothing until A (pairing)
                           note='stock reaches CH 7 via auto-repeat; ours taps Right 6x for the same values'),
     '04_screen_off': dict(ours=['k:s', 'f:60', 'k:-', 'f:5', 'k:A', 'f:5']),
     '05_black':      dict(ours=['k:sv', 'f:60', 'k:-', 'f:5']),

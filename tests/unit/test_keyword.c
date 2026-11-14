@@ -68,29 +68,61 @@ static void test_stock_recorded_pairs(void)
 static void test_split_is_lossless_and_fits_the_data_path(void)
 {
     for (uint32_t w = 0; w < 0x1000; w++) {
-        uint16_t hi = kw_hi((uint16_t)w), lo = kw_lo((uint16_t)w);
+        uint16_t hi = kw_hi((uint16_t)w);
+        uint16_t lo = kw_lo((uint16_t)w);
         TEST_ASSERT_TRUE(lo <= PROTO_LO_MASK);
         TEST_ASSERT_TRUE(hi <= PROTO_LO_MASK); // 12 bits fit two halves on both protocols
         TEST_ASSERT_EQUAL_HEX16(w, (uint16_t)((hi << PROTO_SHIFT) | lo));
     }
 }
 
-static void test_key_halves_never_look_like_sync(void)
+static void test_protocol_constants_are_the_stock_bytes(void)
 {
-    // The ATtiny must never mistake a key half for a sync byte mid-stream (it can't on either
-    // protocol: halves are < 0x40 on v1.1b, and < 0x80 but checked here for v1.1a).
-    for (uint16_t k = 0; k <= K_ALL; k++) {
-        uint16_t w = kw_pack(k, true);
-        TEST_ASSERT_NOT_EQUAL(PROTO_SYNC, kw_hi(w));
+    // Literal bytes from the stock ROMs (HARDWARE.md §4.1), not the macros under test.
+#if defined(PROTOCOL_V11B)
+    const uint16_t sync = 0x29;
+    const uint16_t gb1 = 0x23;
+    const uint16_t gb2 = 0x1A;
+    const uint16_t cfg1 = 0x2D;
+    const uint16_t cfg2 = 0x12;
+#else
+    const uint16_t sync = 0x49;
+    const uint16_t gb1 = 0x63;
+    const uint16_t gb2 = 0x5A;
+    const uint16_t cfg1 = 0x6D;
+    const uint16_t cfg2 = 0x52;
+#endif
+    TEST_ASSERT_EQUAL_HEX16(sync, PROTO_SYNC);
+    TEST_ASSERT_EQUAL_HEX16(gb1, PROTO_GB1);
+    TEST_ASSERT_EQUAL_HEX16(gb2, PROTO_GB2);
+    TEST_ASSERT_EQUAL_HEX16(cfg1, PROTO_CFG1);
+    TEST_ASSERT_EQUAL_HEX16(cfg2, PROTO_CFG2);
+}
+
+static void test_key_hi_half_range_matches_stock_encoding(void)
+{
+    // Real key words only use bits 0-11, so the hi half is at most 0x1F (v1.1a, >>7) or 0x3F
+    // (v1.1b, >>6). A *lo* half can equal the sync byte (e.g. A+Left+Select = 0x49 on v1.1a):
+    // harmless and identical to stock, because the ATtiny only looks for sync before it has
+    // synced. (Corrected after Gemini chunk1 F5.)
+    for (uint32_t k = 0; k <= K_ALL; k++) {
+        uint16_t w = kw_pack((uint16_t)k, true);
+        TEST_ASSERT_TRUE(kw_hi(w) <= (PROTO_SHIFT == 7 ? 0x1Fu : 0x3Fu));
     }
+    TEST_ASSERT_EQUAL_HEX16(PROTO_SHIFT == 7 ? 0x49 : 0x09, kw_lo(kw_pack(K_A | K_LEFT | K_SELECT, false)));
 }
 
 static void test_config_bytes_match_stock_recording(void)
 {
     uint16_t out[5];
     kw_config_bytes(7, 1, 1, out); // tests/baselines/*/03_config.log
-    TEST_ASSERT_EQUAL_HEX16(PROTO_CFG1, out[0]);
-    TEST_ASSERT_EQUAL_HEX16(PROTO_CFG2, out[1]);
+#if defined(PROTOCOL_V11B)
+    TEST_ASSERT_EQUAL_HEX16(0x2D, out[0]);
+    TEST_ASSERT_EQUAL_HEX16(0x12, out[1]);
+#else
+    TEST_ASSERT_EQUAL_HEX16(0x6D, out[0]);
+    TEST_ASSERT_EQUAL_HEX16(0x52, out[1]);
+#endif
     TEST_ASSERT_EQUAL_HEX16(7, out[2]);
     TEST_ASSERT_EQUAL_HEX16(1, out[3]);
     TEST_ASSERT_EQUAL_HEX16(1, out[4]);
@@ -116,7 +148,8 @@ int main(void)
     RUN_TEST(test_xy_disabled_never_sets_bits_10_11);
     RUN_TEST(test_stock_recorded_pairs);
     RUN_TEST(test_split_is_lossless_and_fits_the_data_path);
-    RUN_TEST(test_key_halves_never_look_like_sync);
+    RUN_TEST(test_protocol_constants_are_the_stock_bytes);
+    RUN_TEST(test_key_hi_half_range_matches_stock_encoding);
     RUN_TEST(test_config_bytes_match_stock_recording);
     RUN_TEST(test_config_address_bit7_travels_in_bit6);
     return UNITY_END();

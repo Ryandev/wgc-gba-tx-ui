@@ -18,7 +18,7 @@ No third-party code: operators are simple, deliberate source rewrites. link_writ
 import os, re, shutil, subprocess, sys, tempfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DEFAULT = ['src/link.c', 'src/core/keyword.c']
+DEFAULT = ['src/link.c', 'src/core/keyword.c', 'src/core/boot.c', 'src/core/pairing.c', 'src/core/text.c']
 
 # (name, regex, replacement). Applied one occurrence at a time.
 OPERATORS = [

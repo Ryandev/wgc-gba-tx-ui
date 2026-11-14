@@ -2,6 +2,7 @@
 #pragma once
 #include <stdbool.h>
 #include <stdint.h>
+#include "../protocol.h"
 
 // Pressed-key mask in REG_KEYINPUT bit order (1 = pressed; the register itself is active-low).
 enum {
@@ -22,8 +23,9 @@ enum {
 uint16_t kw_pack(uint16_t pressed, bool xy);
 
 // The two values written to the cart for one key word (7/7 split on v1.1a, 6/6 on v1.1b).
-uint16_t kw_hi(uint16_t word);
-uint16_t kw_lo(uint16_t word);
+// Inline: they sit between the two cart writes in the send ISR (no extra ROM branch there).
+static inline uint16_t kw_hi(uint16_t word) { return (uint16_t)(word >> PROTO_SHIFT); }
+static inline uint16_t kw_lo(uint16_t word) { return (uint16_t)(word & PROTO_LO_MASK); }
 
 // The 5 values written after the sync byte to pair: CFG1, CFG2, channel, address,
 // (address bit 7 -> bit 6) | packets. Stock-identical (tests/baselines/*/03_config.log).
