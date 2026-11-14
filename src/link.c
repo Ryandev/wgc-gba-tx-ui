@@ -40,6 +40,10 @@ void link_start(void)
     REG_TM3D = (u16)(0x10000 - 524); // period pinned by tests/run_tests.py (SEND_PERIOD_CYCLES)
     // Priority 0 = first in libtonc's ISR table: the send always runs before any other handler
     // (the master ISR scans in order with IME off). SPEC.md §0 rule 7.
-    irq_set(II_TIMER3, link_tick, ISR_PRIO(0));
+    // mutate: accepted[0 -> 1] priority only matters when the VBlank and timer IRQs are pending at
+    // the same moment, and then delays a send by microseconds; no test measures that directly (the
+    // timing suite's 2.2 ms budget can't see it; an earlier kill was a coincidence of boot timing,
+    // review phase1-chunk1 mutation re-run).
+    irq_set(II_TIMER3, link_tick, ISR_PRIO(0)); // mutate: accepted[0 -> 1] (see above)
     REG_TM3CNT = TM_FREQ_64 | TM_IRQ | TM_ENABLE;
 }

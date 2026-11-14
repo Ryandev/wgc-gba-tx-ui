@@ -68,50 +68,50 @@ def pill(cx, cy, length, width, angle_deg, steps=12):
     return pts
 
 
-def clip(poly, inside, cross):
-    """Sutherland-Hodgman: keep the part of poly where inside(p) holds; cross(p, q) = boundary point."""
+def clip(poly, a, b, c):
+    """Sutherland-Hodgman: the part of poly where a*x + b*y + c >= 0 (repeated points removed)."""
+    def side(p):
+        return a * p[0] + b * p[1] + c
+
     out = []
     for i, cur in enumerate(poly):
         prev = poly[i - 1]
-        if inside(cur):
-            if not inside(prev):
-                out.append(cross(prev, cur))
+        sp, sc = side(prev), side(cur)
+        if (sp >= 0) != (sc >= 0):
+            t = sp / (sp - sc)
+            out.append((prev[0] + t * (cur[0] - prev[0]), prev[1] + t * (cur[1] - prev[1])))
+        if sc >= 0:
             out.append(cur)
-        elif inside(prev):
-            out.append(cross(prev, cur))
-    return out
-
-
-def clip_x(poly, x, keep_above):
-    def inside(p):
-        return p[0] >= x if keep_above else p[0] <= x
-
-    def cross(p, q):
-        t = (x - p[0]) / (q[0] - p[0])
-        return (x, p[1] + t * (q[1] - p[1]))
-    return clip(poly, inside, cross)
-
-
-def clip_y(poly, y, keep_above):
-    def inside(p):
-        return p[1] >= y if keep_above else p[1] <= y
-
-    def cross(p, q):
-        t = (y - p[1]) / (q[1] - p[1])
-        return (p[0] + t * (q[0] - p[0]), y)
-    return clip(poly, inside, cross)
+    dedup = [p for i, p in enumerate(out) if abs(p[0] - out[i - 1][0]) > 1e-9 or abs(p[1] - out[i - 1][1]) > 1e-9]
+    return dedup
 
 
 def dpad_parts(outline):
-    """Split the traced cross into four arms and the centre square, so each lights on its own."""
+    """Split the traced cross into four arms and the centre square, so each lights on its own.
+
+    A partition (every point in exactly one part): the centre square |dx|, |dy| <= arm/2, and four
+    wedges split by the diagonals (as the mockups decide a direction, make_mockups_cad.py
+    dpad_dir), so the inner corner fillets are shared between neighbouring arms. Review
+    phase1-chunk1 F3: clipping each arm on one axis only left slivers and spikes.
+    """
     xs, ys = [p[0] for p in outline], [p[1] for p in outline]
     cx, cy, a = (min(xs) + max(xs)) / 2, (min(ys) + max(ys)) / 2, DPAD_ARM / 2
-    centre = clip_y(clip_y(clip_x(clip_x(outline, cx - a, True), cx + a, False), cy - a, True), cy + a, False)
+
+    def wedge(ux, uy):
+        # direction (ux, uy): beyond the centre square along it, and inside its 90-degree wedge
+        poly = clip(outline, ux, uy, -(ux * cx + uy * cy) - a)
+        for px, py in ((uy, ux), (-uy, -ux)):   # the two diagonals bounding the wedge
+            poly = clip(poly, ux + px, uy + py, -((ux + px) * cx + (uy + py) * cy))
+        return poly
+
+    centre = outline
+    for ux, uy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+        centre = clip(centre, -ux, -uy, ux * cx + uy * cy + a)
     return {
-        'dpad-up': clip_y(outline, cy + a, True),
-        'dpad-down': clip_y(outline, cy - a, False),
-        'dpad-left': clip_x(outline, cx - a, False),
-        'dpad-right': clip_x(outline, cx + a, True),
+        'dpad-up': wedge(0, 1),
+        'dpad-down': wedge(0, -1),
+        'dpad-left': wedge(-1, 0),
+        'dpad-right': wedge(1, 0),
         'dpad-centre': centre,
     }
 
@@ -178,6 +178,8 @@ def build(trace=None):
            f'<style>{CSS}</style>']
     def extra(pid, role):
         a = dict(SHADE.get(role, {}))
+        if pid == 'dpad-centre':
+            a = {}   # never lit and never on the cross's edge: no shade entries of its own (F7)
         if pid.startswith('dpad-'):
             a['data-group'] = 'dpad'   # the cross shades as one piece; each arm keeps its own entries
         return ''.join(f' {k}="{v}"' for k, v in a.items())

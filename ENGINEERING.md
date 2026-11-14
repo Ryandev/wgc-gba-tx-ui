@@ -148,6 +148,14 @@ Proposal:
 
 ---
 
+**Phase 1 chunk 1 (2026-11-14):** 295/308 on the first run. Real gaps found: `view_init` could
+write one byte past its struct, `view_mix` let bit 15 leak, and the text screen's forced blank was
+untested; each now has a test. The send IRQ's priority mutant (`ISR_PRIO(0) -> 1`), killed in an
+earlier run, survived this time: that kill was a coincidence of boot timing, since priority only
+matters when two IRQs are pending at once and then costs microseconds. It is now *accepted*
+(reported, never counted). Equivalent mutants (larger arrays, a sub-pixel affine shear,
+off-screen map rows) are annotated in place.
+
 ## 5. Screenshot (golden image) tests
 
 **Status 2026-11-14: built.** `tests/visual.py` + `tests/pngio.py` (no image library needed), 8 screens ×

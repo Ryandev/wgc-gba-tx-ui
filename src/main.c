@@ -19,13 +19,15 @@
 #define BG_PAL_ENTRIES 256
 #define CBB_TEXT       0 // charblock holding the font tiles
 #define TEXT_BGCNT     (BG_CBB(CBB_TEXT) | BG_SBB(SBB_TEXT))
+#define TEXT_BUPOFS    0 // mutate: equivalent[0 -> 1] (tte_init_se puts the ink at bupofs + 1: colour follows)
 
 static void text_init(void)
 {
-    // Set everything up first, enable the layer last: real VRAM isn't zeroed at boot, so clear the
-    // screenblock (Gemini chunk3 F3).
-    REG_DISPCNT = DCNT_MODE0;
-    tte_init_se(0, TEXT_BGCNT, 0xF000, CLR_YELLOW, 0, &ps2pFont, NULL);
+    // Set everything up under forced blank, enable the layer last: real VRAM and palette RAM aren't
+    // zeroed at boot, so clear the screenblock (Gemini chunk3 F3) and set the backdrop before
+    // anything is shown (phase1-chunk1 F1).
+    REG_DISPCNT = DCNT_MODE0 | DCNT_BLANK;
+    tte_init_se(0, TEXT_BGCNT, 0xF000, CLR_YELLOW, TEXT_BUPOFS, &ps2pFont, NULL);
     memset16(se_mem[SBB_TEXT], 0, SBB_ENTRIES);
     pal_bg_mem[0] = RGB15(4, 4, 6);
     REG_DISPCNT = DCNT_MODE0 | DCNT_BG0;
@@ -86,34 +88,35 @@ int main(void)
 
     // Read the boot holds BEFORE anything goes on the bus (SPEC.md §S boot order).
     boot_plan plan = boot_decide(pressed_now());
+    view_state view;
+    view_init(&view);
 
     if (plan.screen == SCREEN_BLACK) {
-        // Black screen (backlit mods), done the stock way: BG0 on, whole palette black.
-        // A layers-off frame with backdrop 0x0000 renders white in mGBA 0.10 (found by the golden
-        // tests); BG0 + black palette is black in both, and matches the stock ROM. Palette and map
-        // are zeroed before the layer is enabled, so no frame ever shows anything else.
+        // Black screen (backlit mods), done the stock way: BG0 on, whole palette black. Palette and
+        // map are zeroed before the layer is enabled, so no frame ever shows anything else.
+        // (Mutation testing, Phase 1 chunk 1: with no layer on, the black backdrop shows, so `|` ->
+        // `&` below looks identical. The earlier note here that a layers-off frame renders white
+        // was wrong; the white frames are the boot flash before main, see SPEC.md.)
         memset16(pal_bg_mem, 0, BG_PAL_ENTRIES);
         memset16(se_mem[SBB_TEXT], 0, SBB_ENTRIES); // mutate: equivalent[0 -> 1] (black palette)
         REG_BG0CNT = TEXT_BGCNT;
-        REG_DISPCNT = DCNT_MODE0 | DCNT_BG0;
+        REG_DISPCNT = DCNT_MODE0 | DCNT_BG0; // mutate: equivalent[| -> &] (see above)
     } else if (plan.screen == SCREEN_OFF) {
-        REG_DISPCNT = DCNT_MODE0; // screen "off": plain backdrop, nothing drawn
-        pal_bg_mem[0] = RGB15(8, 8, 8);
+        pal_bg_mem[0] = RGB15(8, 8, 8); // backdrop first (F1), then show it
+        REG_DISPCNT = DCNT_MODE0;       // screen "off": plain backdrop, nothing drawn
     } else if (plan.settings) {
         text_init();
         at(0, "WGC-GBA-TX-UI " VERSION);
         at(1, "PROTOCOL " PROTO_NAME);
         pairing_menu(); // never returns
     } else {
-        screen_main_init(); // bulk VRAM load, before any key traffic (SPEC §0 rule 7)
+        screen_main_init(&view, plan.gb_mode); // bulk VRAM load, before any key traffic (SPEC §0 rule 7)
     }
 
     link_sync();
     if (plan.gb_mode) link_gb_mode(); // GB mode: no L/R (the LED shows amber)
 
     link_start();
-    view_state view;
-    view_init(&view);
     for (;;) {
         VBlankIntrWait();
         // Palette writes only, at the start of VBlank, from the word the send IRQ last sent

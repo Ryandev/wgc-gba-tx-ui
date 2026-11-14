@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Tests for the asset generators in tools/ (run by `make tools-test`, part of `make check`)."""
+import json
 import os
 import random
 import sys
@@ -113,6 +114,13 @@ class SvgToGba(unittest.TestCase):
         self.assertIn('#define TST_PAL_LEN 3', outs[0])
         self.assertIn('0x0000, 0x001F, 0x07E0', outs[0])
 
+    def test_default_glow_matches_the_rom(self):
+        # F7: the glow's default palette must equal what view_led_colours() writes at run time
+        # (view_mix in 5-bit channels, weights 141 / 77): see tests/unit/test_view.c (0x466A, 0x49CA).
+        body, led = (0x50, 0x40, 0xA8), (0x58, 0xE0, 0x70)
+        self.assertEqual(svg_to_gba.rgb15(svg_to_gba.mix555(body, led, 141)), 0x466A)
+        self.assertEqual(svg_to_gba.rgb15(svg_to_gba.mix555(body, led, 77)), 0x49CA)
+
     def test_rejects_too_many_tiles_and_invisible_parts(self):
         from PIL import Image
         noisy = Image.new('L', (256, 256))
@@ -187,6 +195,34 @@ class SvgToGba(unittest.TestCase):
         gap_mid = (gen_controller_svg.top_y(poly['body'], cx) + gen_controller_svg.top_y(poly['lens'], cx)) / 2
         self.assertAlmostEqual((min(ys) + max(ys)) / 2, gap_mid, places=6)
 
+    def test_dpad_partition_of_the_real_cad_outline(self):
+        # review phase1-chunk1 F3: one-axis clipping left a full-height sliver in dpad-left and a
+        # spike in dpad-up. The parts must tile the outline exactly and each stay on its own side.
+        trace = json.loads(read(os.path.join(ROOT, 'assets', 'controller_cad.json')))
+        outline = [tuple(p) for p in trace['parts']['dpad']['outline']]
+        parts = gen_controller_svg.dpad_parts(outline)
+
+        def area(p):
+            return abs(sum(p[i][0] * p[i - 1][1] - p[i - 1][0] * p[i][1] for i in range(len(p)))) / 2
+
+        self.assertAlmostEqual(sum(area(p) for p in parts.values()), area(outline), places=6)
+        xs, ys = [p[0] for p in outline], [p[1] for p in outline]
+        cx, cy, a = (min(xs) + max(xs)) / 2, (min(ys) + max(ys)) / 2, gen_controller_svg.DPAD_ARM / 2
+        eps = 1e-9
+        up, dn, lf, rt = parts['dpad-up'], parts['dpad-down'], parts['dpad-left'], parts['dpad-right']
+        self.assertGreaterEqual(min(y for _, y in up), cy + a - eps)
+        self.assertLessEqual(max(y for _, y in dn), cy - a + eps)
+        self.assertLessEqual(max(x for x, _ in lf), cx - a + eps)
+        self.assertGreaterEqual(min(x for x, _ in rt), cx + a - eps)
+        for pid in ('dpad-up', 'dpad-down'):   # no spike sideways: at most arm + fillets wide
+            w = max(x for x, _ in parts[pid]) - min(x for x, _ in parts[pid])
+            self.assertLess(w, gen_controller_svg.DPAD_ARM + 1.0, pid)
+        for pid in ('dpad-left', 'dpad-right'):
+            h = max(y for _, y in parts[pid]) - min(y for _, y in parts[pid])
+            self.assertLess(h, gen_controller_svg.DPAD_ARM + 1.0, pid)
+        c = parts['dpad-centre']
+        self.assertAlmostEqual(area(c), gen_controller_svg.DPAD_ARM ** 2, places=6)
+
     def test_pill_size_and_angle(self):
         p = gen_controller_svg.pill(10, 5, 16, 2, 0)
         xs, ys = [x for x, _ in p], [y for _, y in p]
@@ -230,7 +266,8 @@ class SvgToGba(unittest.TestCase):
         self.assertEqual(px[10, 4], e['led-glow1'])    # d2 = 1
         self.assertEqual(px[11, 5], e['led-glow1'])    # d2 = 5 (<= 6)
         self.assertEqual(px[11, 6], e['led-glow2'])    # d2 = 8 (<= 12)
-        self.assertEqual(entries[e['led-glow1'] - 1][1], (155, 155, 155))   # body + 0.55 of the way to LED
+        # view_mix in 5-bit: body 100>>3 = 12, LED 200>>3 = 25, (12*115 + 25*141) >> 8 = 19 -> 152
+        self.assertEqual(entries[e['led-glow1'] - 1][1], (152, 152, 152))
 
     def test_shading_group_has_no_inner_edges(self):
         from PIL import Image

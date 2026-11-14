@@ -47,8 +47,18 @@ void view_init(view_state *v);
 // ones fade one step.
 void view_step(view_state *v, uint16_t word);
 
-// Mix two BGR555 colours per channel: `num` / `den` of the way from `from` to `to` (den > 0).
-uint16_t view_mix(uint16_t from, uint16_t to, unsigned num, unsigned den);
+// Weights are in 1/256 (0 = all `from`, 256 = all `to`): multiplies and a shift only, no division
+// (ENGINEERING.md §1: no divide instruction; review phase1-chunk1 F2).
+#define VIEW_W_ONE   256u
+#define VIEW_W_GLOW1 141u // 0.55, the mockups' inner LED glow ring
+#define VIEW_W_GLOW2 77u  // 0.30, outer ring
+
+// Mix two BGR555 colours per channel, `w` / 256 of the way from `from` to `to` (0 <= w <= 256).
+// Bit 15 of the inputs is ignored; the result never has it set.
+uint16_t view_mix(uint16_t from, uint16_t to, unsigned w);
+
+// Weight for a fade level (0..VIEW_FADE_FRAMES): level / VIEW_FADE_FRAMES, rounded, in 1/256.
+unsigned view_fade_weight(unsigned level);
 
 // The 3 palette colours (fill, hi, lo) for button b, given its normal colours. In GB mode L and R
 // light amber, flat, because they're pressed but not sent (§C).

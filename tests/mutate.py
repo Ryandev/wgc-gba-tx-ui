@@ -24,8 +24,8 @@ No third-party code. link_write.s is excluded (frozen; delay loop mutation-teste
 import os, re, shutil, subprocess, sys, tempfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DEFAULT = ['src/link.c', 'src/main.c', 'src/core/keyword.h', 'src/core/keyword.c', 'src/core/boot.c',
-           'src/core/pairing.c', 'src/core/text.c']
+DEFAULT = ['src/link.c', 'src/main.c', 'src/screen_main.c', 'src/core/keyword.h', 'src/core/keyword.c',
+           'src/core/boot.c', 'src/core/pairing.c', 'src/core/text.c', 'src/core/view.c']
 INFRA = 3      # exit code run_tests.py / visual.py / unit-fast use for infrastructure errors
 NO_BUILD = 200  # unit-fast: host compile failed
 

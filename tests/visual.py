@@ -16,25 +16,32 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 
 # name -> harness steps; every p:<capture> becomes golden <name>__<capture>.png (several per screen).
 SCREENS = {
-    'boot':    ['f:30', 'p:idle'],
+    # boot frames: 1-7 are white in stock too (crt0, forced blank); frame 8 must already be the whole,
+    # correct picture, never garbage backdrop or a torn image (review phase1-chunk1 F1)
+    'boot':    ['f:7', 'p:frame7', 'f:1', 'p:frame8', 'f:22', 'p:idle'],
+    # Captures wait 7 frames after a change (> VIEW_FADE_FRAMES = 6), so earlier presses have fully
+    # faded and each shot shows only what's held (review phase1-chunk1 F5).
     # each D-pad direction captured on its own (chunk3 F1: a single final shot only checked Right)
-    'dpad':    ['f:30', 'k:^', 'f:3', 'p:up', 'k:v', 'f:3', 'p:down', 'k:<', 'f:3', 'p:left', 'k:>', 'f:3', 'p:right'],
+    'dpad':    ['f:30', 'k:^', 'f:7', 'p:up', 'k:v', 'f:7', 'p:down', 'k:<', 'f:7', 'p:left', 'k:>', 'f:7', 'p:right'],
     # chords: every button in several combinations (chosen in Phase 0 so the hex readout showed 0-F)
-    'chords':  ['f:30', 'k:lrA', 'f:3', 'p:lra', 'k:lrAB', 'f:3', 'p:lrab', 'k:sSB', 'f:3', 'p:ssb',
-                'k:Av<s', 'f:3', 'p:a_down_left_sel', 'k:r^<S', 'f:3', 'p:r_up_left_start',
-                'k:B>v', 'f:3', 'p:b_right_down', 'k:A>', 'f:3', 'p:hex5', 'k:B<', 'f:3', 'p:hexA',
-                'k:AB<', 'f:3', 'p:hexB', 'k:A><', 'f:3', 'p:hexD', 'k:B><', 'f:3', 'p:hexE', 'k:^v<>', 'f:3', 'p:hex3C',
-                'k:-', 'f:3', 'p:released'],
-    # GB mode: amber LED; L/R pressed light amber (pressed but not sent), then fade back
-    'gb_mode': ['k:A', 'f:30', 'k:-', 'f:3', 'p:shown', 'k:l', 'f:3', 'p:l_amber', 'k:r', 'f:3', 'p:r_amber',
-                'k:-', 'f:3', 'p:r_fading', 'f:6', 'p:faded'],
-    # release fade: mid-fade, then fully back after VIEW_FADE_FRAMES (must equal boot__idle)
-    'fade':    ['f:30', 'k:A', 'f:3', 'k:-', 'f:3', 'p:a_half', 'f:6', 'p:a_gone'],
+    'chords':  ['f:30', 'k:lrA', 'f:7', 'p:lra', 'k:lrAB', 'f:7', 'p:lrab', 'k:sSB', 'f:7', 'p:ssb',
+                'k:Av<s', 'f:7', 'p:a_down_left_sel', 'k:r^<S', 'f:7', 'p:r_up_left_start',
+                'k:B>v', 'f:7', 'p:b_right_down', 'k:A>', 'f:7', 'p:hex5', 'k:B<', 'f:7', 'p:hexA',
+                'k:AB<', 'f:7', 'p:hexB', 'k:A><', 'f:7', 'p:hexD', 'k:B><', 'f:7', 'p:hexE', 'k:^v<>', 'f:7', 'p:hex3C',
+                'k:-', 'f:7', 'p:released'],
+    # GB mode: amber LED; L/R pressed light amber (pressed but not sent); the fade ends at exactly 6
+    'gb_mode': ['k:A', 'f:30', 'k:-', 'f:7', 'p:shown', 'k:l', 'f:7', 'p:l_amber', 'k:r', 'f:7', 'p:r_amber',
+                'k:-', 'f:3', 'p:r_fading', 'f:4', 'p:faded'],
+    # release fade: 6 steps (VIEW_FADE_FRAMES), seen one frame after the release (the release reaches
+    # the sent word within 2 ms; the palette is written at the next VBlank). So: half way at 3 frames,
+    # the last faint step at 6, exactly back to boot__idle at 7. A longer fade fails a_gone.
+    'fade':    ['f:30', 'k:A', 'f:7', 'k:-', 'f:3', 'p:a_half', 'f:3', 'p:a_last', 'f:1', 'p:a_gone'],
     'off':     ['k:s', 'f:30', 'p:grey'],
     # frame 9 = first frame after startup; frames 1-7 are white in stock too (crt0 clears RAM under forced
     # blank before main), so they're not a useful golden (see SPEC.md, boot flash note)
     'black':   ['k:sv', 'f:9', 'p:frame9', 'f:21', 'p:frame30'],
-    'pairing': ['k:S', 'f:30', 'k:-', 'f:3', 'p:menu', 'k:>', 'f:2', 'k:-', 'f:2', 'k:v', 'f:2', 'k:-', 'f:3',
+    # frame 7: text setup under forced blank, no garbage backdrop (phase1-chunk1 F1, mutation re-run)
+    'pairing': ['k:S', 'f:7', 'p:frame7', 'f:23', 'k:-', 'f:3', 'p:menu', 'k:>', 'f:2', 'k:-', 'f:2', 'k:v', 'f:2', 'k:-', 'f:3',
                 'p:moved', 'k:v', 'f:2', 'k:-', 'f:2', 'k:<', 'f:2', 'k:-', 'f:3', 'p:packets_min',
                 'k:A', 'f:2', 'k:-', 'f:5', 'p:sent'],
 }

@@ -114,12 +114,15 @@ def hexrgb(h):
     return tuple(int(h[i:i + 2], 16) for i in (0, 2, 4))
 
 
-def blend(a, b, t):
-    """a moved t of the way towards b."""
-    return tuple(int(x + (y - x) * t) for x, y in zip(a, b))
+# (max squared px distance from the LED centre, weight of the LED colour in 1/256). The weights are
+# src/core/view.h VIEW_W_GLOW1/2 and the mix is view_mix()'s, so the default palette equals what
+# the ROM writes at run time (review phase1-chunk1 F7).
+GLOW_RINGS = ((6, 141), (12, 77))
 
 
-GLOW_RINGS = ((6, 0.55), (12, 0.3))   # (max squared px distance from the LED centre, share of LED colour)
+def mix555(a, b, w):
+    """view_mix() on 8-bit RGB: per 5-bit channel (a*(256-w) + b*w) >> 8, returned as 8-bit RGB."""
+    return tuple((((x >> 3) * (256 - w) + (y >> 3) * w) >> 8) << 3 for x, y in zip(a, b))
 
 
 def shade(labels, parts, attrs, colours):
@@ -157,8 +160,6 @@ def shade(labels, parts, attrs, colours):
             extra[pid] = {'hi': new_entry(pid + '-hi', hexrgb(a['data-hi']))}
         elif mode is not None:
             raise ValueError(f'{pid}: unknown data-shade {mode!r}')
-    if len(entries) > 255:
-        raise ValueError(f'{len(entries)} palette entries: an 8bpp palette has room for 255')
 
     w, h = labels.size
     src, out = labels.load(), labels.copy()
@@ -195,7 +196,7 @@ def shade(labels, parts, attrs, colours):
             continue
         pts = [(x, y) for y in range(h) for x in range(w) if src[x, y] == index[pid]]
         cx, cy = sum(p[0] for p in pts) / len(pts), sum(p[1] for p in pts) / len(pts)
-        rings = [new_entry(f'{pid}-glow{n}', blend(fill[into], fill[pid], t)) for n, (_, t) in enumerate(GLOW_RINGS, 1)]
+        rings = [new_entry(f'{pid}-glow{n}', mix555(fill[into], fill[pid], w)) for n, (_, w) in enumerate(GLOW_RINGS, 1)]
         for y in range(int(cy) - 4, int(cy) + 5):
             for x in range(int(cx) - 4, int(cx) + 5):
                 if at(x, y) != index[into]:
@@ -205,6 +206,8 @@ def shade(labels, parts, attrs, colours):
                     if d2 <= limit:
                         dst[x, y] = entry
                         break
+    if len(entries) > 255:   # after every entry is allocated, glow included (F7)
+        raise ValueError(f'{len(entries)} palette entries: an 8bpp palette has room for 255')
     return out, entries
 
 
