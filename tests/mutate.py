@@ -151,7 +151,7 @@ def main():
     if subprocess.run(['make', '-s', '-C', ROOT, 'build/emu_harness'], capture_output=True).returncode:
         sys.exit('mutate: cannot build build/emu_harness')
     with tempfile.TemporaryDirectory() as tmp:
-        for f in ('Makefile', 'ld', 'scripts', 'tools', 'tests'):
+        for f in ('Makefile', 'assets', 'ld', 'scripts', 'tools', 'tests'):
             s, d = os.path.join(ROOT, f), os.path.join(tmp, f)
             (shutil.copytree if os.path.isdir(s) else shutil.copy)(s, d)
         try:

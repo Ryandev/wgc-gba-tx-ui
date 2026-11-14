@@ -3,6 +3,7 @@
 // Phase 0 screen: minimal text. The real UI comes in Phase 1.
 #include <string.h>
 #include <tonc.h>
+#include "assets.h"
 #include "link.h"
 #include "protocol.h"
 #include "core/boot.h"
@@ -23,7 +24,7 @@ static void text_init(void)
     // Set everything up first, enable the layer last: real VRAM isn't zeroed at boot, so clear the
     // screenblock (Gemini chunk3 F3).
     REG_DISPCNT = DCNT_MODE0;
-    tte_init_se_default(0, TEXT_BGCNT);
+    tte_init_se(0, TEXT_BGCNT, 0xF000, CLR_YELLOW, 0, &ps2pFont, NULL);
     memset16(se_mem[SBB_TEXT], 0, SBB_ENTRIES);
     pal_bg_mem[0] = RGB15(4, 4, 6);
     REG_DISPCNT = DCNT_MODE0 | DCNT_BG0;
