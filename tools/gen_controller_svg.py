@@ -32,8 +32,10 @@ TRACE = os.path.join(ROOT, 'assets', 'controller_cad.json')
 SHELL_POCKETS = {
     'grille': dict(cx=49.34, first_y=-21.5852, pitch=3.0, count=5, length=16.7243, width=1.5684, angle=13.9486),
     'ss':     dict(cx=-48.2488, first_y=-19.5206, pitch=8.0, count=2, length=16.9362, width=5.9819, angle=166.0597),
-    'panel':  dict(cx=0.03905, cy=35.43665, length=18.5213, height=4.4913),
+    'panel':  dict(cx=0.03905, cy=35.43665, length=18.5213, height=4.4913),   # cy not used, see below
 }
+# Owner decision (2026-11-14): the top oval is centred vertically between the shell's top edge and
+# the top of the lens, on the centre line (the CAD has it 1.2 mm lower).
 DPAD_ARM = 5.75   # width of each arm of the cross (CAD lib/part/dpad.py ARM_WIDTH)
 
 # Pixel shading, as in the approved mockups (mockups/make_mockups_cad.py); svg_to_gba.py applies it
@@ -114,6 +116,14 @@ def dpad_parts(outline):
     }
 
 
+def top_y(poly, x):
+    """Highest y where the polygon's outline crosses the vertical line at x."""
+    ys = [y1 + (x - x1) * (y2 - y1) / (x2 - x1)
+          for (x1, y1), (x2, y2) in zip(poly[-1:] + poly[:-1], poly)
+          if x1 != x2 and (x1 - x) * (x2 - x) <= 0]
+    return max(ys)
+
+
 def f(x):
     return f'{x:.2f}'.rstrip('0').rstrip('.')
 
@@ -141,7 +151,8 @@ def build(trace=None):
     for i in range(gr['count']):   # speaker-1 is the top slot
         y = gr['first_y'] + (gr['count'] - 1 - i) * gr['pitch']
         add(f'speaker-{i + 1}', 'slot', pill(gr['cx'], y, gr['length'], gr['width'], gr['angle']))
-    add('top-slot', 'slot', pill(pn['cx'], pn['cy'], pn['length'], pn['height'], 0))
+    oval_y = (top_y(t['body'], pn['cx']) + top_y(t['lens'], pn['cx'])) / 2
+    add('top-slot', 'slot', pill(pn['cx'], oval_y, pn['length'], pn['height'], 0))
     add('lens', 'lens', t['lens'])
     add('lcd', 'lcd', t['lcd'])
     add('led', 'led', t['led'])

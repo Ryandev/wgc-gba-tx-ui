@@ -179,6 +179,14 @@ class SvgToGba(unittest.TestCase):
         self.assertGreater(min(y for _, y in parts['dpad-up']), 0)    # up is +y in the CAD frame
         self.assertLess(max(x for x, _ in parts['dpad-left']), 0)
 
+    def test_top_oval_centred_between_shell_and_lens(self):
+        _, parts = gen_controller_svg.build()
+        poly = {pid: p for pid, _, p in parts}
+        ys = [y for _, y in poly['top-slot']]
+        cx = gen_controller_svg.SHELL_POCKETS['panel']['cx']
+        gap_mid = (gen_controller_svg.top_y(poly['body'], cx) + gen_controller_svg.top_y(poly['lens'], cx)) / 2
+        self.assertAlmostEqual((min(ys) + max(ys)) / 2, gap_mid, places=6)
+
     def test_pill_size_and_angle(self):
         p = gen_controller_svg.pill(10, 5, 16, 2, 0)
         xs, ys = [x for x, _ in p], [y for _, y in p]
