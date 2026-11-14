@@ -1,26 +1,26 @@
 # Stock UI (v1.1a) features, and what we might want instead
 
 The screenshots are from the **real stock v1.1a ROM** running in mGBA (headless, via
-`tools/emu_harness.c`) on 2026-11-14. They're scaled 3x in `reference/screenshots-v1.1a/`. mGBA
+`tools/emu_harness.c`) on 2026-11-14. They're scaled 3x in `reference/screenshots-v1.1a/`, which is local only: they show insideGadgets' UI, so they aren't published. Run `tools/emu_harness.c` against your own stock ROM dump to regenerate them. mGBA
 skips the BIOS boot logo, so you won't see the Nintendo logo here.
 
 ## 1. Every screen the stock ROM has
 
 ### Normal boot (nothing held)
-![idle](reference/screenshots-v1.1a/01_normal__02_keyheld.png)
+`01_normal__02_keyheld.png`
 
 - The title "insideGadgets" plus "Wireless GBA Controller v1.1a", in white libgba console text on
   dark grey (`#424242`).
 - One `.` at row 3 while **any** key is down. That's the only feedback that anything is happening.
 
 ### B held at boot: key letters
-![LR](reference/screenshots-v1.1a/02_showkeys__05_L_R.png) ![ST](reference/screenshots-v1.1a/02_showkeys__04_start_select.png)
+`02_showkeys__05_L_R.png` `02_showkeys__04_start_select.png`
 
 - Prints letters for the keys held: `L R U D A B S T L R`. Left and the L shoulder both print `L`,
   and Start/selecT print `S`/`T`, so it's ambiguous.
 
 ### Start held at boot: Options (pairing) menu
-![menu](reference/screenshots-v1.1a/03_config__01_menu.png) ![tx](reference/screenshots-v1.1a/03_config__05_transmitting.png)
+`03_config__01_menu.png` `03_config__05_transmitting.png`
 
 - Three rows: RF Channel, RF Address, Pcks/Refresh. Up/Down moves the `>`, Left/Right changes the value.
 - **Holding Left or Right auto-repeats fast.** Two short presses moved the channel from 1 to 7 in the test.

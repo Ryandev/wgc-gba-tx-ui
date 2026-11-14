@@ -46,20 +46,22 @@ GitHub at pinned commits by `scripts/fetch_deps.sh`.
     The new ROM is written from scratch on the **v1.1a protocol**. Protocol constants sit behind a build flag so a
     v1.1b cart works too. X/Y (L+R+A/B) gets ported in as an **experiment**: bits 10/11 fit in the 7-bit high half,
     but nobody knows yet whether the v1.1a ATtiny forwards them.
-- [ ] Buy a GBxCart RW (I don't have a flasher; see `FLASHING.md`). Not needed until a ROM is ready. Then **dump the stock ROM** first.
+- [ ] **Buy a GBxCart RW now** (owner agreed after Gemini review F6), then **Phase 0.5** hardware validation
+      before Phase 1 (SPEC.md §2): dump and verify stock, flash Phase 0, mid-session GB-mode probe.
 - [ ] Check the receiver on the Pi: `lsusb | grep -i 16c0:27dc`, `jstest /dev/input/js0`.
 - [ ] Toolchain: devkitPro's servers block this network (Cloudflare 403), so no devkitPro installer
       and no Docker. Ubuntu `gcc-arm-none-eabi` + newlib, with libtonc (MIT), devkitPro's GBA crt0 and
       linker script (MPL-2.0) and gbafix (GPL-3.0, build tool only) built from GitHub at pinned commits:
       libtonc `c5af1b2`, devkitarm-crtls `1c0c102`, gba-tools `054d507`. Proven 2026-11-14: a test ROM
       booted in mGBA and wrote the `0x49` sync byte. Glue needed: define `fake_heap_end`, link GCC's
-      `crti/crtbegin/crtend/crtn`, and skip libtonc's `tte_iohook.c`. Installer: `/tmp/gba.sh`.
-- [x] Toolchain installed (`/tmp/gba.sh` log: `/tmp/gba-install.log`).
+      `crti/crtbegin/crtend/crtn`, and skip libtonc's `tte_iohook.c`. 
+- [x] Toolchain installed (Ubuntu packages, see Build).
 - [x] **Phase 0 done (2026-11-14):** `make && make test` builds `build/wgc-gba-tx-ui.gba` (12 KB vs
       stock 78 KB). It reproduces the stock v1.1a cart byte stream in all 6 recorded scenarios
       (sync, GB mode, pairing, screen off/black, all key combos), at about 2.0 ms per key word.
       A v1.1b build correctly fails the v1.1a baselines. The cart write + delay is a bus-faithful
       copy of the stock instruction sequence (`src/link_write.s`).
+- [ ] Phase 0.5: hardware validation (needs GBxCart RW).
 - [ ] Phase 1: CAD-based controller view, LED status and LCD notes, splash, Settings basics.
 - [ ] New UI.
 

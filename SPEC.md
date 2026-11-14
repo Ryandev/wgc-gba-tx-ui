@@ -22,6 +22,23 @@ set the build order. Protocol facts are in `HARDWARE.md`. The stock behaviour we
    `printf` bloat. Assets come from `grit`. Test in mGBA with `tools/emu_harness.c` before going
    anywhere near hardware.
 
+7. **Performance is a core requirement (owner, 2026-11-14).** The UI must never add input latency.
+   Button → cart write is at most one send period (2 ms) plus the write itself, whatever is on screen.
+   - **No large DMA during play.** A DMA transfer stalls the CPU and IRQs. 32 KB from ROM is about
+     5 ms, which would delay a send. Bulk graphics load at boot, the splash, or behind the Settings
+     zoom (input is paused there anyway). During play: palette swaps, a few tiles, OAM updates,
+     each well under 0.2 ms.
+   - **Keep IRQ handlers tiny.** libtonc's default master ISR doesn't nest, so a long VBlank handler
+     would hold back the timer-3 send. VBlank only sets a flag or copies a shadow OAM. All drawing
+     runs in the main loop, which the send IRQ can preempt. The send IRQ has priority. If any
+     handler grows, switch to the nesting ISR (`isr_master_nest`).
+   - **Enforced by tests** (the harness logs a CPU-cycle timestamp per cart write):
+     - *Gap test:* during a UI-heavy scenario (splash, zoom in/out, LCD notes, idle dim), no gap
+       between consecutive key words exceeds 2.2 ms (stock: about 2.1 ms).
+     - *Press-to-send test:* a key change appears in the cart writes within 2.2 ms of the
+       KEYINPUT change, measured in cycles.
+     A failure blocks the merge, like a protocol mismatch.
+
 ---
 
 ## 0.5 Screen layout principles (agreed 2026-11-14)
@@ -91,7 +108,7 @@ including its "power cycle to play" step, happens entirely in Settings (E/S).
 | LED | Meaning | States | LCD note |
 |---|---|---|---|
 | **Green** | Sending your input normally | Normal play | blank |
-| **Amber** | Sending, with a caveat | GB mode (L/R not sent); pairing never confirmed from this ROM; a key held ≥ 30 s | GB mode: **nothing** until L or R is pressed (see below). Others: a short timed note, e.g. "CHECK THE RECEIVER LED / SOLID = OK / BLINK = WEAK". |
+| **Amber** | Sending, with a caveat | GB mode (L/R not sent); a key held ≥ 60 s (warning off by default) | GB mode: **nothing** until L or R is pressed (see below). Others: a short timed note, e.g. "CHECK THE RECEIVER LED / SOLID = OK / BLINK = WEAK". |
 | **Red** | Not sending gameplay input | Reserved. Only reachable from the main screen if the stretch overlay (N) pauses sending. | e.g. "PAUSED / INPUT NOT SENT" |
 
 **GB mode is quiet:** the LED is amber and nothing else changes. When L or R is pressed, the
@@ -123,11 +140,19 @@ countdown bar. It all hides after about 3 s from the last L/R press. See `mockup
     SOURCE" with the GitHub repo URL**: `github.com/Ryandev/wgc-gba-tx-ui`, on two lines on screen
     (`GITHUB.COM/RYANDEV/` + `WGC-GBA-TX-UI`). Layout in `mockups/32_*`.
     The send rate moves to Stats.
-- **Flow (agreed 2026-11-14):** hold Start at boot → Settings hub. **Nothing is sent while in
-  Settings.** The ROM hasn't sent the sync byte yet, so the ATtiny ignores the bus, which also makes
-  Settings the safe moment for flash saves (F). **PLAY** (or Start) sends sync, then the GB-mode
-  bytes if GB mode is on, and goes to the main screen. After pairing has been sent, PLAY is
-  replaced by "POWER CYCLE TO PLAY".
+- **Boot order (fixed after Gemini review F2, 2026-11-14):** read the keys **before** sending
+  anything.
+  - **Start not held** (normal boot): sync, GB pair if GB mode, start sending, *then* the splash.
+    Keys are live from the splash's first frame.
+  - **Start held** (boot-time Settings): **no sync, no splash, nothing sent.** The ATtiny is still
+    waiting for sync and ignores the bus, which makes this the only safe moment for flash saves (F).
+  - **PLAY** (or Start) from boot-time Settings: sync, then the GB pair if GB mode is on, start
+    sending, zoom out to the main screen.
+  - **Pairing** (A in the wizard): `link_send_config()` sends **sync first**, then `CFG1 CFG2 ch addr
+    pk`, exactly as stock (baseline 03_config: `49 6D 52 07 01 01`). PLAY is then replaced by "POWER
+    CYCLE TO PLAY", because the ATtiny repeats the config until power-off.
+  - **In-session Settings** (L+R+Select): sync was sent long ago, so changes apply to RAM for this
+    session only. Pairing and GB mode show "applies at next boot", and nothing is saved to flash.
 - **Zoom transition (2026-11-14):** entering Settings zooms into the drawn LCD (centred on it)
   until it fills the screen at about 2.33×, then the menu fades in on the green. Exiting is the
   reverse: menu fades out, zoom back out to the controller. The drawn LCD's aspect (about 1.48) is
@@ -136,6 +161,11 @@ countdown bar. It all hides after about 3 s from the last L/R press. See `mockup
   (mode 1, BG2), about 12 frames / 200 ms, LED red from the first frame (neutral is sent as soon
   as the combo fires). See `mockups/33_settings_zoom_storyboard.png`. On boot-time entry (Start
   held) the same zoom runs straight after the splash.
+  **Layer plan (Gemini F8):** affine BG2 (mode 1) is 8bpp, one 256-colour palette, max 256 tiles
+  (the controller needs about 189), no tile flips, and doesn't scale sprites. So the controller and LED live
+  in BG2. Pressed-button highlights are sprites (OBJ) during play and are **hidden on zoom frame 1**
+  (input is paused then anyway). The LED colour is a BG2 palette entry. Settings text is BG0,
+  faded in with alpha blending.
 - GB mode is also a toggle under Input. Holding A at boot still works.
 - Without storage, the hub says "CHANGES LAST UNTIL POWER OFF".
 - The full-screen green-LCD style is in `mockups/19_*`–`23_*`.
@@ -147,6 +177,8 @@ countdown bar. It all hides after about 3 s from the last L/R press. See `mockup
   look like a fault).
 - The power LED gets a **soft glow** (1–2 px halo) so its status reads at a glance.
 - **In-session entry: hold L+R+Select for 1 s** opens Settings (N, promoted from stretch to core).
+  Accepted side effect (owner, 2026-11-14): the game receives L+R+Select for that second (about 500
+  key words) before input pauses. Suppressing it would mean delaying every L/R/Select press.
   Holding Start at boot still works.
 
 ### E. Pairing wizard (Phase 2)
@@ -159,7 +191,8 @@ countdown bar. It all hides after about 3 s from the last L/R press. See `mockup
 - **Lives entirely inside Settings.** After A is pressed the ATtiny sends the config until
   power-off, so the wizard's last screen ("POWER CYCLE TO PLAY") stays up and never returns to the
   main screen.
-- v1.1b build only: limit the address to 1–63 (see `HARDWARE.md` §4.4).
+- v1.1b build only: limit **channel and address** to 1–63 (`PROTO_MAX_CH/ADDR` in `src/protocol.h`;
+  see `HARDWARE.md` §4.4). A 6-bit path would also drop bit 6 of channels ≥ 64.
 - *Accept:* the bytes match the stock config log for the same values.
 
 ### F. Remember channel and address (Phase 1 simple / Phase 4 research)
@@ -175,8 +208,13 @@ countdown bar. It all hides after about 3 s from the last L/R press. See `mockup
     busy. JEDEC commands in word mode: GBA `0x08000AAA` / `0x08000554`.
   - **ATtiny safety:** every cart write also reaches the ATtiny, but it ignores everything until
     the sync byte (`0x49` on v1.1a). So **save only in the boot-time Settings screen, before sync is
-    sent**, and encode the data so no byte has low-7-bits = `0x49` (or `0x29` on v1.1b). Gameplay
+    sent**, and encode the data so **no 16-bit halfword written** (word-mode program data *and* the JEDEC
+    command words) has its low 7 bits = `0x49` (low 6 bits = `0x29` on v1.1b). The CPLD latches
+    AD0–6 of every write. JEDEC words AA/55/A0/80/30 → 2A/55/20/00/30 are safe. Gemini review F2. Gameplay
     never coincides with a flash write.
+  - **Drain the CPLD after flashing** (NEEDS HARDWARE, Gemini F2.2): status polling (DQ7/DQ6) is cart
+    reads, which re-arm the CPLD between writes, and the last write leaves its ready line set. After
+    the final operation, do a few dummy ROM reads and the stock delay before `link_sync()`.
   - Unverified: that /WR reaches the flash's WE# through the CPLD for GBA-initiated writes (likely,
     since GBxCart RW flashes it in place). mGBA treats ROM as read-only, so this needs a hardware
     test with a GBxCart RW for recovery. Until then, use build-time defaults (simple F).
@@ -301,8 +339,14 @@ boot-time settings screen (hold Start at boot). N later upgrades them to in-sess
 | Stretch | O, P, Q, R, U | Any time after Phase 1 if wanted |
 | Companion | Z (Pi link monitor) | After Phase 1. Starts with the receiver investigation. |
 
-Hardware milestones: buy the GBxCart RW before flashing Phase 1. Dump and verify the stock ROM
-first (`FLASHING.md`).
+Hardware milestones (**changed after Gemini review F6, owner agreed 2026-11-14**): buy the GBxCart RW
+**now**. **Phase 0.5 comes before Phase 1:**
+1. Dump and verify the stock ROM (`FLASHING.md`).
+2. Flash the Phase 0 ROM and confirm the IRQ-driven sender works with the real CPLD + ATtiny
+   (receiver LED solid, `jstest` on the Pi shows every button, no stuck or phantom keys).
+3. Probe ROM: send the GB pair (`63 5A`) about 2 s *after* key traffic starts. Does the cart switch
+   to GB mode? This settles whether GB mode and pairing work mid-session (§N finding).
+4. Restore the stock ROM, or keep Phase 0.
 
 ---
 

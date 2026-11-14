@@ -1,87 +1,114 @@
 #!/usr/bin/env python3
-"""Regression test: does our ROM put the same protocol stream on the cart bus as the stock ROM?
+"""Regression + timing test: does our ROM drive the cart bus like the stock ROM, within budget?
 
-Runs the ROM headless in mGBA (tools/emu_harness.c) through the same key scenarios that produced
-tests/baselines/v1.1a/*.log (recorded from the stock v1.1a ROM). For each scenario it
-compares:
-  - the preamble exactly: sync byte, then GB-mode pair or pairing message if present
-  - the key-word stream as a sequence of (hi, lo) pairs, collapsing consecutive repeats (timing
-    differs slightly between ROMs: stock is about 2.1 ms, ours 2.0 ms, so counts differ but order mustn't)
-  - the send rate: 7-9 key words per frame (about 2 ms)
+    python3 tests/run_tests.py <emu_harness> <rom.gba> <v1.1a|v1.1b>
 
-usage: run_tests.py <emu_harness> <rom.gba> <baseline_dir>
+Runs every scenario in tests/scenarios.py headless in mGBA and checks, per scenario:
+  bus      every cart store is a 16-bit STRH to exactly 0x08000000 (no 8/32-bit, no other address)
+  preamble sync byte, then GB-mode pair or pairing message, identical to the stock recording
+  framing  after the preamble writes come in hi/lo pairs 0.12-0.5 ms apart (stray byte, missing delay)
+  pairs    the key-word stream, as (hi, lo) pairs with consecutive repeats collapsed, matches stock
+  gap      no gap between consecutive key words > 2.2 ms (SPEC.md §0 rule 7)
+  latency  every key change appears on the bus within 2.2 ms (press-to-send)
+  rate     every frame between the first and last key word carries 7-9 key words (stalls show up as 0)
 """
 import os, subprocess, sys, tempfile
+from scenarios import SCENARIOS, PROTOCOLS, CPU_HZ, MAX_GAP_MS, MAX_PAIR_MS, MIN_PAIR_MS, pack, read_log
 
-SYNC, GB, CFG = 0x49, (0x63, 0x5A), (0x6D, 0x52)   # v1.1a
-
-# name: (our key script, note). Same scripts as the stock recordings, except 03 (see note).
-TAP_RIGHT = ['k:>', 'f:3', 'k:-', 'f:6']
-SCENARIOS = {
-    '01_normal':     (['f:60', 'k:A', 'f:10', 'k:-', 'f:10'], ''),
-    '02_showkeys':   (['k:B', 'f:60', 'k:-', 'f:5', 'k:A', 'f:5', 'k:^>', 'f:5', 'k:Ss', 'f:5',
-                       'k:lr', 'f:5', 'k:lrA', 'f:5'], 'stock B-at-boot key letters dropped; bytes identical'),
-    '03_config':     (['k:S', 'f:60', 'k:-', 'f:10'] + TAP_RIGHT * 6 +
-                      ['k:v', 'f:3', 'k:-', 'f:6', 'k:v', 'f:3', 'k:-', 'f:6', 'k:A', 'f:5', 'k:-', 'f:30'],
-                      'stock reached CH 7 via auto-repeat; we tap Right 6x to reach the same values'),
-    '04_screen_off': (['k:s', 'f:60', 'k:-', 'f:5', 'k:A', 'f:5'], ''),
-    '05_black':      (['k:sv', 'f:60', 'k:-', 'f:5'], ''),
-    '06_gbmode':     (['k:A', 'f:60', 'k:-', 'f:5'], ''),
-}
-
-
-def read_log(path):
-    rows = []
-    for line in open(path):
-        if line.startswith('#'): continue
-        f = line.split()
-        if f[2] == '??': raise SystemExit(f'{path}: unrecognised store: {line.strip()}')
-        rows.append((int(f[0]), int(f[2], 16)))
-    return rows
-
-
-def parse(rows):
-    """-> (preamble tuple, collapsed pair list, pairs per frame)"""
-    vals = [v for _, v in rows]
-    if not vals or vals[0] != SYNC: return ('NO SYNC; first writes:',) + tuple(vals[:4]), [], 0
-    pre, i = [SYNC], 1
-    if tuple(vals[1:3]) == GB: pre += vals[1:3]; i = 3
-    elif tuple(vals[1:3]) == CFG: pre += vals[1:6]; i = 6
-    pairs = [tuple(vals[j:j + 2]) for j in range(i, len(vals) - 1, 2)]
-    collapsed = [p for k, p in enumerate(pairs) if k == 0 or p != pairs[k - 1]]
-    frames = {}
-    for f, _ in rows[i:]: frames[f] = frames.get(f, 0) + 1
-    mid = sorted(frames)[2:-2] if len(frames) > 6 else []
-    rate = (sum(frames[f] for f in mid) / len(mid) / 2) if mid else 0
-    return tuple(pre), collapsed, rate
+HERE = os.path.dirname(os.path.abspath(__file__))
 
 
 def fmt(seq):
     return [hex(v) if isinstance(v, int) else v for v in seq]
 
 
-def run(harness, rom, script):
-    with tempfile.TemporaryDirectory() as d:
-        subprocess.run([harness, rom, d] + script, check=True, capture_output=True)
-        return read_log(os.path.join(d, 'cart_writes.log'))
+PAIR = MAX_PAIR_MS / 1000 * CPU_HZ
+MINPAIR = MIN_PAIR_MS / 1000 * CPU_HZ
+
+
+def analyse(writes, proto, end=None):
+    """-> dict(pre, pairs=[(frame, cycle, word, (hi, lo))], errs)"""
+    errs = [f'bad store: width {w} at {a:#010x} value {v}' for _, _, a, w, v in writes
+            if w != 16 or a != 0x08000000 or v is None]
+    vals = [v for *_, v in writes]
+    if not vals or vals[0] != proto['sync']:
+        return dict(pre=('NO SYNC; first writes:',) + tuple(vals[:4]), pairs=[], errs=errs)
+    i = 1
+    if tuple(vals[1:3]) == proto['gb']: i = 3
+    elif tuple(vals[1:3]) == proto['cfg']: i = 6
+    rest = writes[i:]
+    if len(rest) % 2:
+        # odd count: fine only if the last write is a hi half cut off by the end of the run
+        if end is None or end - rest[-1][1] > PAIR:
+            errs.append(f'framing: {len(rest)} writes after the preamble, stray half pair at cycle {rest[-1][1]}')
+        rest = rest[:-1]
+    for j in range(0, len(rest) - 1, 2):     # each hi must be followed closely by its lo
+        dt = rest[j + 1][1] - rest[j][1]
+        if dt > PAIR:
+            errs.append(f'framing: hi->lo spacing {dt / CPU_HZ * 1000:.3f} ms at frame {rest[j][0]} (stray byte?)')
+            break
+        if dt < MINPAIR:
+            errs.append(f'write delay: hi->lo spacing {dt / CPU_HZ * 1000:.3f} ms < {MIN_PAIR_MS} ms (delay loop shortened?)')
+            break
+    pairs = [(rest[j][0], rest[j][1], (rest[j][4] << proto['shift']) | rest[j + 1][4], (rest[j][4], rest[j + 1][4]))
+             for j in range(0, len(rest) - 1, 2)]
+    return dict(pre=tuple(vals[:i]), pairs=pairs, errs=errs)
+
+
+def collapsed(pairs):
+    hl = [p[3] for p in pairs]
+    return [p for k, p in enumerate(hl) if k == 0 or p != hl[k - 1]]
+
+
+def timing(pairs, keys, proto):
+    """-> (max gap ms, max press-to-send ms, rate problems)"""
+    if len(pairs) < 2: return 0.0, 0.0, []
+    cyc = [p[1] for p in pairs]
+    gap = max(b - a for a, b in zip(cyc, cyc[1:]))
+    lat = 0
+    for _, kc, km in keys:
+        if kc < cyc[0] or kc > cyc[-1]: continue
+        want = pack(km, proto['xy'])
+        hit = next((p for p in pairs if p[1] >= kc and p[2] == want), None)
+        lat = max(lat, (hit[1] - kc) if hit else 10 ** 12)
+    per = {}
+    for f, *_ in pairs: per[f] = per.get(f, 0) + 1
+    f0, f1 = pairs[0][0], pairs[-1][0]
+    rate = [f'frame {f}: {per.get(f, 0)} key words' for f in range(f0 + 1, f1) if not 7 <= per.get(f, 0) <= 9]
+    ms = lambda c: c / CPU_HZ * 1000
+    return ms(gap), ms(lat), rate
 
 
 def main():
-    harness, rom, base = sys.argv[1:4]
+    harness, rom, ver = sys.argv[1:4]
+    proto = PROTOCOLS[ver]
+    base = os.path.join(HERE, 'baselines', ver)
     fails = 0
-    for name, (script, note) in SCENARIOS.items():
-        s_pre, s_pairs, s_rate = parse(read_log(os.path.join(base, name + '.log')))
-        o_pre, o_pairs, o_rate = parse(run(harness, rom, script))
-        problems = []
-        if o_pre != s_pre: problems.append(f'preamble {fmt(o_pre)} != stock {fmt(s_pre)}')
-        if o_pairs != s_pairs: problems.append(f'key pairs {o_pairs} != stock {s_pairs}')
-        if s_pairs and not (7 <= o_rate <= 9): problems.append(f'rate {o_rate:.1f} key words/frame (want 7-9)')
-        ok = not problems
-        fails += not ok
-        print(f"{'PASS' if ok else 'FAIL'}  {name:14} pre={fmt(o_pre)} pairs={len(o_pairs)} "
-              f"rate={o_rate:.1f}/frame (stock {s_rate:.1f})" + (f'  [{note}]' if note else ''))
-        for p in problems: print('      ' + p)
-    print(f'\n{len(SCENARIOS) - fails}/{len(SCENARIOS)} scenarios match the stock ROM')
+    for name, sc in SCENARIOS.items():
+        s_w, s_k, s_e = read_log(os.path.join(base, name + '.log'))
+        with tempfile.TemporaryDirectory() as d:
+            r = subprocess.run([harness, rom, d] + sc['ours'], capture_output=True, text=True)
+            if r.returncode:
+                print(f'FAIL  {name:14} harness error: {r.stderr.strip() or r.returncode}')
+                fails += 1
+                continue
+            o_w, o_k, o_e = read_log(os.path.join(d, 'cart_writes.log'))
+        s, o = analyse(s_w, proto, s_e), analyse(o_w, proto, o_e)
+        probs = list(o['errs'])
+        if o['pre'] != s['pre']: probs.append(f"preamble {fmt(o['pre'])} != stock {fmt(s['pre'])}")
+        if collapsed(o['pairs']) != collapsed(s['pairs']):
+            probs.append(f"pairs {collapsed(o['pairs'])} != stock {collapsed(s['pairs'])}")
+        gap, lat, rate = timing(o['pairs'], o_k, proto)
+        sgap, slat, _ = timing(s['pairs'], s_k, proto)
+        if gap > MAX_GAP_MS: probs.append(f'gap {gap:.2f} ms > {MAX_GAP_MS} ms')
+        if lat > MAX_GAP_MS: probs.append(f'press-to-send {lat:.2f} ms > {MAX_GAP_MS} ms')
+        probs += [f'rate: {r}' for r in rate[:3]]
+        fails += bool(probs)
+        t = f'gap {gap:.2f}ms lat {lat:.2f}ms (stock {sgap:.2f}/{slat:.2f})' if o['pairs'] else 'no key words'
+        print(f"{'PASS' if not probs else 'FAIL'}  {name:14} pre={fmt(o['pre'])} pairs={len(collapsed(o['pairs']))} {t}"
+              + (f"  [{sc['note']}]" if sc.get('note') else ''))
+        for p in probs: print('      ' + p)
+    print(f'\n{ver}: {len(SCENARIOS) - fails}/{len(SCENARIOS)} scenarios match the stock ROM within the timing budget')
     sys.exit(1 if fails else 0)
 
 

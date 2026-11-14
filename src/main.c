@@ -36,7 +36,7 @@ static void hex3(char *out, u16 v)
 static void pairing_menu(void)
 {
     u8 val[3] = { 1, 1, 1 };                     // TODO Phase 1: build-time defaults (SPEC F)
-    const u8 lo[3] = { 1, 1, 1 }, hi[3] = { 125, 254, 4 };
+    const u8 lo[3] = { 1, 1, 1 }, hi[3] = { PROTO_MAX_CH, PROTO_MAX_ADDR, 4 };
     const char *name[3] = { "RF CHANNEL", "RF ADDRESS", "PCKS/REFRESH" };
     int row = 0, rep = 0;
     at(0, 3, "--- PAIRING ---");

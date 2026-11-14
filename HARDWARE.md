@@ -195,8 +195,9 @@ After that the ATtiny writes the values to EEPROM and keeps sending them on a fi
 until power-off. Plug the receiver in (it blinks twice), then power-cycle the GBA [doc].
 
 > Warning [inferred]: on v1.1b, `address` (up to 254) and the bit-6 flag don't fit in 6 bits. Either
-> the newer hardware really passes 7 bits, or addresses above 63 don't pair properly. **A custom UI
-> should limit the address to 1-63 until this is tested.**
+> the newer hardware really passes 7 bits, or addresses above 63 don't pair properly. The same
+> applies to **channels 64–125** (bit 6 lost). **A custom UI should limit channel and address to
+> 1-63 until this is tested.** (Our v1.1b build does: `PROTO_MAX_CH/ADDR`.)
 
 ### 4.5 Boot options [doc + RE]
 
