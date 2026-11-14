@@ -27,3 +27,21 @@ jobs:
           path: |
             build/wgc-gba-tx-ui.gba
             build/v11b/wgc-gba-tx-ui.gba
+
+  mutation:
+    needs: check
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends gcc-arm-none-eabi binutils-arm-none-eabi \
+            libnewlib-arm-none-eabi build-essential git libmgba-dev
+      - name: Cache pinned dependencies
+        uses: actions/cache@v4
+        with:
+          path: build/deps
+          key: deps-${{ hashFiles('scripts/fetch_deps.sh') }}
+      - name: make mutate (every valid mutant of src/link.c + src/core must be killed)
+        run: make mutate

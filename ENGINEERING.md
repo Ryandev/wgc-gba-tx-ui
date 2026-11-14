@@ -108,6 +108,13 @@ To make host unit tests possible, the code is split into **pure modules** (no re
 
 ## 4. Mutation testing (Stryker equivalent)
 
+**Status 2026-11-14:** `tests/mutate.py` (our own, no third-party code) is built: `make mutate` and a CI
+job. First run: 39/56 killed (70%). Survivors showed **Left was never pressed in any emulator
+scenario** (fixed: `08_each_button`), and X/Y and address bit 7 were only unit-reachable. Now
+**51/51 valid mutants killed (100%)**, 3 annotated equivalent. Mull (host, LLVM IR) still needs the
+owner to install it (`/tmp/gba-mull.sh`, checksum-verified), because running downloaded binaries needs approval.
+
+
 Options for C:
 - **Mull** (LLVM-based, actively maintained): mutates at IR level, needs Clang. Fits the **host
   unit tests** (built with clang for x86). Best signal-to-noise.

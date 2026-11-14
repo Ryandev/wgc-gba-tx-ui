@@ -7,6 +7,7 @@
 #   make run              open the ROM in mgba-qt
 #   make unit             host unit tests of src/core (Unity), both protocols
 #   make coverage         unit + gcovr line/branch coverage gate (build/coverage.html)
+#   make mutate           mutation testing on the real ARM build (slow; CI job 'mutation')
 #   make lint             gcc -fanalyzer + clang-tidy + cppcheck
 #   make check            format-check + lint + test-all (what CI and the pre-push hook run)
 #   make hooks            enable the repo's git hooks (.githooks/pre-push)
@@ -40,7 +41,7 @@ SRC_C    := $(wildcard src/*.c src/core/*.c)
 SRC_S    := $(wildcard src/*.s)
 OBJS     := $(SRC_C:src/%.c=$(B)/obj/%.o) $(SRC_S:src/%.s=$(B)/obj/%.o)
 
-.PHONY: all deps test test-v11b test-all baselines unit coverage lint format format-check check hooks run clean
+.PHONY: all deps test test-v11b test-all baselines unit coverage mutate lint format format-check check hooks run clean
 all: $(B)/$(NAME).gba
 
 # ---- third-party: fetched at pinned commits, built here ------------------------------------
@@ -136,6 +137,13 @@ coverage: unit
 	@gcovr -r . --object-directory $(B)/unit --filter 'src/core/' --exclude-unreachable-branches \
 	  --print-summary --fail-under-line $(COV_LINE) --fail-under-branch $(COV_BRANCH) \
 	  --html-details $(B)/coverage.html -s | tail -3
+
+# ---- mutation testing (ENGINEERING.md §4) ---------------------------------------------------
+# Mutates src/link.c + src/core/*.c, rebuilds the real ARM ROM per mutant, and runs unit tests
+# (both protocols) + the v1.1a emulator suite. Fails if any mutant survives. ~4-6 min.
+MUTATE_SRC ?= src/link.c $(CORE_SRC)
+mutate: $(B)/emu_harness $(DEPS)/.stamp
+	python3 tests/mutate.py $(MUTATE_SRC)
 
 # ---- static analysis / style (ENGINEERING.md §2) ------------------------------------------
 LINT_SRC  := $(SRC_C)
