@@ -36,6 +36,17 @@ SHELL_POCKETS = {
 }
 DPAD_ARM = 5.75   # width of each arm of the cross (CAD lib/part/dpad.py ARM_WIDTH)
 
+# Pixel shading, as in the approved mockups (mockups/make_mockups_cad.py); svg_to_gba.py applies it
+# per pixel and gives each shade its own palette entry. By role:
+SHADE = {
+    'button':   {'data-shade': 'raised', 'data-hi': '#5c5c70', 'data-lo': '#24242c'},
+    'shoulder': {'data-shade': 'raised', 'data-hi': '#6858c0', 'data-lo': '#281c60'},
+    'body':     {'data-shade': 'rim', 'data-rim': '#281c60'},
+    'trim':     {'data-shade': 'rim', 'data-rim': '#281c60'},
+    'lens':     {'data-shade': 'top-hi', 'data-hi': '#303044'},
+    'led':      {'data-glow-into': 'body'},
+}
+
 CSS = ('.body{fill:#5040a8}.shoulder{fill:#382c80}.trim{fill:#40349a}.lens{fill:#202030}'
        '.lcd{fill:#b0d890}.button{fill:#3c3c4c}.plate{fill:#3c3090}.slot{fill:#281c60}.led{fill:#58e070}')
 
@@ -154,7 +165,13 @@ def build(trace=None):
            '     lib/part/shell.front.py constants). Units: mm. Part ids are used by the asset pipeline;',
            '     colours here are only a preview. -->',
            f'<style>{CSS}</style>']
-    out += [f'<path id="{pid}" class="{role}" d="{d(poly)}"/>' for pid, role, poly in parts]
+    def extra(pid, role):
+        a = dict(SHADE.get(role, {}))
+        if pid.startswith('dpad-'):
+            a['data-group'] = 'dpad'   # the cross shades as one piece; each arm keeps its own entries
+        return ''.join(f' {k}="{v}"' for k, v in a.items())
+
+    out += [f'<path id="{pid}" class="{role}"{extra(pid, role)} d="{d(poly)}"/>' for pid, role, poly in parts]
     out.append('</svg>')
     return '\n'.join(out) + '\n', parts
 

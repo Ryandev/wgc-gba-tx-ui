@@ -134,7 +134,7 @@ class SvgToGba(unittest.TestCase):
         self.assertEqual(amap[0], 1)
         self.assertEqual(tiles[1][1], 5)
         self.assertEqual(tiles[1][16], 7)
-        hdr, src, _ = svg_to_gba.emit('t', 'x.svg', img, [('p', 'a')], {}, tiles, amap)
+        hdr, src, _ = svg_to_gba.emit('t', 'x.svg', img, [('p', (0, 0, 0))], tiles, amap)
         # tile 1 starts at word 16: bytes 0..3 = 00 05 00 00 -> 0x00000500; bytes 16..19 -> word 20 = 0x00000007
         words = src.split('t_tiles[32]')[1].split('};')[0].replace('\n', ' ').split(',')
         words = [w.strip(' ={') for w in words if w.strip(' ={')]
@@ -187,6 +187,53 @@ class SvgToGba(unittest.TestCase):
         self.assertAlmostEqual(max(ys) - min(ys), 2, places=6)
         q = gen_controller_svg.pill(0, 0, 16, 2, 90)
         self.assertAlmostEqual(max(y for _, y in q), 8)
+
+    def test_shading_raised_rim_tophi_glow(self):
+        from PIL import Image
+        # body 1 fills 12x12 at (2,2); a raised 4x4 button 2 at (5,5); lens 3 (top-hi) 2x2 at (10,10);
+        # LED 4 at (9,4) glowing into body
+        img = Image.new('L', (16, 16), 0)
+        img.paste(1, (2, 2, 14, 14))
+        img.paste(2, (5, 5, 9, 9))
+        img.paste(3, (10, 10, 12, 12))
+        img.putpixel((9, 4), 4)
+        parts = [('body', 'b'), ('btn', 'k'), ('lens', 'l'), ('led', 'g')]
+        attrs = {'body': {'data-shade': 'rim', 'data-rim': '#010101'},
+                 'btn': {'data-shade': 'raised', 'data-hi': '#020202', 'data-lo': '#030303'},
+                 'lens': {'data-shade': 'top-hi', 'data-hi': '#040404'},
+                 'led': {'data-glow-into': 'body'}}
+        colours = {'b': (100, 100, 100), 'k': (0, 0, 0), 'l': (0, 0, 0), 'g': (200, 200, 200)}
+        out, entries = svg_to_gba.shade(img, parts, attrs, colours)
+        names = [n for n, _ in entries]
+        self.assertEqual(names, ['body', 'btn', 'lens', 'led', 'body-rim', 'btn-hi', 'btn-lo', 'lens-hi',
+                                 'led-glow1', 'led-glow2'])
+        e = {n: i for i, n in enumerate(names, 1)}
+        px = out.load()
+        self.assertEqual(px[2, 7], e['body-rim'])      # left edge of the body
+        self.assertEqual(px[7, 13], e['body-rim'])     # bottom edge
+        self.assertEqual(px[13, 7], e['body'])         # right edge: no rim (as in the mockups)
+        self.assertEqual(px[6, 5], e['btn-hi'])        # top row of the button
+        self.assertEqual(px[5, 7], e['btn-hi'])        # left column
+        self.assertEqual(px[7, 8], e['btn-lo'])        # bottom row
+        self.assertEqual(px[7, 7], e['btn'])           # inside
+        self.assertEqual(px[11, 10], e['lens-hi'])     # top row of the lens (body above it)
+        self.assertEqual(px[11, 11], e['lens'])
+        self.assertEqual(px[9, 4], e['led'])
+        self.assertEqual(px[10, 4], e['led-glow1'])    # d2 = 1
+        self.assertEqual(px[11, 5], e['led-glow1'])    # d2 = 5 (<= 6)
+        self.assertEqual(px[11, 6], e['led-glow2'])    # d2 = 8 (<= 12)
+        self.assertEqual(entries[e['led-glow1'] - 1][1], (155, 155, 155))   # body + 0.55 of the way to LED
+
+    def test_shading_group_has_no_inner_edges(self):
+        from PIL import Image
+        img = Image.new('L', (10, 6), 0)
+        img.paste(1, (1, 1, 5, 5))
+        img.paste(2, (5, 1, 9, 5))
+        raised = {'data-shade': 'raised', 'data-hi': '#ffffff', 'data-lo': '#000000', 'data-group': 'g'}
+        out, entries = svg_to_gba.shade(img, [('a', 'x'), ('b', 'x')], {'a': raised, 'b': raised}, {})
+        e = {n: i for i, (n, _) in enumerate(entries, 1)}
+        self.assertEqual(out.getpixel((5, 2)), e['b'])   # left neighbour is 'a', same group: no highlight
+        self.assertEqual(out.getpixel((1, 2)), e['a-hi'])
 
     def test_real_drawing_fits(self):
         svg = read(os.path.join(ROOT, 'assets', 'controller.svg'))

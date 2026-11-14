@@ -186,8 +186,13 @@ Sources are committed; everything the ROM uses is generated at build time into `
 - **One palette entry per SVG part**, hard edges (a pixel is a part's when it is at least half
   covered; later parts paint over earlier ones). Lighting a button = one palette write in VBlank,
   no tile or map traffic, so the UI costs nothing on the input path.
+- **Pixel shading as palette entries** (the approved mockups' rules, `data-shade` attributes in the
+  SVG): raised parts get `<part>-hi` on top/left edge pixels and `<part>-lo` on the bottom edge
+  (the D-pad's arms shade as one group); the body and trims get a dark rim; the lens a light top
+  edge; the LED a 2-ring glow into the body. Lighting a button = writing its 3 entries; LED status
+  = LED + 2 glow entries. 53 entries in all.
 - **Affine background** (for the Settings zoom): map entries are bytes, so at most 256 tiles, no
-  flips. The tool dedupes identical tiles and fails the build above 256 (232 px wide: 183 tiles).
+  flips. The tool dedupes identical tiles and fails the build above 256 (232 px wide, shaded: 193 tiles).
 - **Font must sit on its pixel grid:** the converter fails if any rendered pixel is grey, so no
   anti-aliasing choice is ever made silently.
 - Both tools are deterministic and tested (`tests/test_tools.py`, `make tools-test`, in `make check`).

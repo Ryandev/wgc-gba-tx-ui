@@ -63,8 +63,8 @@ def class_colours(svg):
     """{class: (r, g, b)} from the SVG's <style> (simple '.cls{fill:#rrggbb}' rules)."""
     out = {}
     style = re.search(r'<style>(.*?)</style>', svg, re.S)
-    for cls, hexrgb in re.findall(r'\.([\w-]+)\s*\{\s*fill:\s*#([0-9a-fA-F]{6})', style.group(1) if style else ''):
-        out[cls] = tuple(int(hexrgb[i:i + 2], 16) for i in (0, 2, 4))
+    for cls, value in re.findall(r'\.([\w-]+)\s*\{\s*fill:\s*#([0-9a-fA-F]{6})', style.group(1) if style else ''):
+        out[cls] = hexrgb(value)
     return out
 
 
@@ -104,6 +104,110 @@ def label_map(svg, width_px):
     return labels, parts
 
 
+def part_attrs(svg):
+    """{part id: its own SVG attributes} (data-shade etc.)."""
+    return {el.get('id'): dict(el.attrib) for el in ET.fromstring(svg).iter() if el.get('id')}
+
+
+def hexrgb(h):
+    h = h.lstrip('#')
+    return tuple(int(h[i:i + 2], 16) for i in (0, 2, 4))
+
+
+def blend(a, b, t):
+    """a moved t of the way towards b."""
+    return tuple(int(x + (y - x) * t) for x, y in zip(a, b))
+
+
+GLOW_RINGS = ((6, 0.55), (12, 0.3))   # (max squared px distance from the LED centre, share of LED colour)
+
+
+def shade(labels, parts, attrs, colours):
+    """Pixel-art shading as extra palette entries, so lighting stays palette-only.
+
+    Per part, from its SVG data attributes (the rules of the approved mockups, make_mockups_cad.py):
+      data-shade="raised" data-hi data-lo [data-group]: a pixel whose up or left neighbour isn't
+          in the same group gets <part>-hi, else one whose down neighbour isn't gets <part>-lo.
+      data-shade="rim" data-rim: a pixel next to transparent (up, down or left) gets <part>-rim.
+      data-shade="top-hi" data-hi: a pixel whose up neighbour is a part drawn earlier gets <part>-hi.
+      data-glow-into="<part>": that part's pixels near this part's centre become <part>-glow1/2,
+          defaulting to a blend of the two colours (the ROM rewrites them with the LED status).
+    Returns (new label image, [(entry name, rgb)] for palette indices 1..N).
+    """
+    entries = [(pid, colours.get(cls, (255, 0, 255))) for pid, cls in parts]
+    fill = {pid: rgb for pid, rgb in entries}
+    index = {pid: i for i, (pid, _) in enumerate(parts, 1)}
+    pid_of = {i: pid for pid, i in index.items()}
+    group = {pid: attrs[pid].get('data-group', pid) for pid, _ in parts}
+
+    def new_entry(name, rgb):
+        entries.append((name, rgb))
+        return len(entries)
+
+    extra = {}
+    for pid, _ in parts:
+        a = attrs[pid]
+        mode = a.get('data-shade')
+        if mode == 'raised':
+            extra[pid] = {'hi': new_entry(pid + '-hi', hexrgb(a['data-hi'])),
+                          'lo': new_entry(pid + '-lo', hexrgb(a['data-lo']))}
+        elif mode == 'rim':
+            extra[pid] = {'rim': new_entry(pid + '-rim', hexrgb(a['data-rim']))}
+        elif mode == 'top-hi':
+            extra[pid] = {'hi': new_entry(pid + '-hi', hexrgb(a['data-hi']))}
+        elif mode is not None:
+            raise ValueError(f'{pid}: unknown data-shade {mode!r}')
+    if len(entries) > 255:
+        raise ValueError(f'{len(entries)} palette entries: an 8bpp palette has room for 255')
+
+    w, h = labels.size
+    src, out = labels.load(), labels.copy()
+    dst = out.load()
+
+    def at(x, y):
+        return src[x, y] if 0 <= x < w and 0 <= y < h else 0
+
+    for y in range(h):
+        for x in range(w):
+            i = src[x, y]
+            pid = pid_of.get(i)
+            if pid not in extra:
+                continue
+            mode = attrs[pid]['data-shade']
+            up, dn, lf = at(x, y - 1), at(x, y + 1), at(x - 1, y)
+            if mode == 'raised':
+                g = group[pid]
+                same = {j for j in (up, dn, lf) if j and group[pid_of[j]] == g}
+                if up not in same or lf not in same:
+                    dst[x, y] = extra[pid]['hi']
+                elif dn not in same:
+                    dst[x, y] = extra[pid]['lo']
+            elif mode == 'rim':
+                if 0 in (up, dn, lf):
+                    dst[x, y] = extra[pid]['rim']
+            elif mode == 'top-hi':
+                if 0 < up < i:
+                    dst[x, y] = extra[pid]['hi']
+
+    for pid, _ in parts:
+        into = attrs[pid].get('data-glow-into')
+        if not into:
+            continue
+        pts = [(x, y) for y in range(h) for x in range(w) if src[x, y] == index[pid]]
+        cx, cy = sum(p[0] for p in pts) / len(pts), sum(p[1] for p in pts) / len(pts)
+        rings = [new_entry(f'{pid}-glow{n}', blend(fill[into], fill[pid], t)) for n, (_, t) in enumerate(GLOW_RINGS, 1)]
+        for y in range(int(cy) - 4, int(cy) + 5):
+            for x in range(int(cx) - 4, int(cx) + 5):
+                if at(x, y) != index[into]:
+                    continue
+                d2 = (x - cx) ** 2 + (y - cy) ** 2
+                for (limit, _), entry in zip(GLOW_RINGS, rings):
+                    if d2 <= limit:
+                        dst[x, y] = entry
+                        break
+    return out, entries
+
+
 def tiles_and_map(labels):
     w, h = labels.size
     tw, th = -(-w // TILE), -(-h // TILE)
@@ -133,9 +237,10 @@ def c_ident(s):
     return re.sub(r'\W', '_', s).upper()
 
 
-def emit(name, svg_path, labels, parts, colours, tiles, amap):
+def emit(name, svg_path, labels, entries, tiles, amap):
+    """entries: [(name, rgb)] for palette indices 1..N."""
     w, h = labels.size
-    pal = [0] + [rgb15(colours.get(cls, (255, 0, 255))) for _, cls in parts]
+    pal = [0] + [rgb15(rgb) for _, rgb in entries]
     used = len(pal)
     pal += [0] * (len(pal) % 2)   # whole words, so a 32-bit copy of the array is safe
     up = name.upper()
@@ -144,9 +249,10 @@ def emit(name, svg_path, labels, parts, colours, tiles, amap):
            f'#define {up}_W {w}           // picture size in px (top left of the 256x256 affine map)',
            f'#define {up}_H {h}',
            f'#define {up}_TILES {len(tiles)}      // 8bpp tiles (64 bytes each)',
-           f'#define {up}_PAL_LEN {used}     // palette entries used: 0 = transparent, then one per part', '',
-           '// Palette index of each part (light a part by writing its entry)', f'enum {name}_part {{']
-    hdr += [f'    {up}_{c_ident(pid)} = {i},' for i, (pid, _) in enumerate(parts, 1)]
+           f'#define {up}_PAL_LEN {used}     // palette entries used: 0 = transparent, then parts and their shading', '',
+           '// Palette index of each part and shading entry (light a part by writing its entries:',
+           '// <part>, <part>_HI, <part>_LO; the LED status is LED plus LED_GLOW1/2)', f'enum {name}_part {{']
+    hdr += [f'    {up}_{c_ident(pid)} = {i},' for i, (pid, _) in enumerate(entries, 1)]
     hdr += ['};', '',
             f'extern const u32 {name}_tiles[{len(tiles) * 16}];   // copy to a charblock',
             f'extern const u32 {name}_map[{MAP_TILES * MAP_TILES // 4}];     // 32x32 bytes; copy to a screenblock',
@@ -188,17 +294,18 @@ def main(argv=None):
     svg = open(a.svg).read()
     try:
         labels, parts = label_map(svg, a.width)
+        labels, entries = shade(labels, parts, part_attrs(svg), class_colours(svg))
         tiles, amap = tiles_and_map(labels)
     except (ValueError, subprocess.CalledProcessError) as e:
         print(f'svg_to_gba: {e}', file=sys.stderr)
         return 1
-    hdr, src, pal = emit(a.name, a.svg, labels, parts, class_colours(svg), tiles, amap)
+    hdr, src, pal = emit(a.name, a.svg, labels, entries, tiles, amap)
     os.makedirs(a.outdir, exist_ok=True)
     for ext, text in (('h', hdr), ('c', src)):
         with open(os.path.join(a.outdir, f'{a.name}.{ext}'), 'w') as f:
             f.write(text)
     preview(labels, pal).save(os.path.join(a.outdir, f'{a.name}_preview.png'))
-    print(f'svg_to_gba: {labels.width}x{labels.height} px, {len(parts)} parts, {len(tiles)} tiles')
+    print(f'svg_to_gba: {labels.width}x{labels.height} px, {len(parts)} parts, {len(entries)} palette entries, {len(tiles)} tiles')
     return 0
 
 

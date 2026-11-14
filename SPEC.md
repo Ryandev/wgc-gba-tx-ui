@@ -170,7 +170,7 @@ countdown bar. It all hides after about 3 s from the last L/R press. See `mockup
   as the combo fires). See `mockups/33_settings_zoom_storyboard.png`. On boot-time entry (Start
   held) the same zoom runs straight after the splash.
   **Layer plan (Gemini F8):** affine BG2 (mode 1) is 8bpp, one 256-colour palette, max 256 tiles
-  (the controller needs 183 at 232 px wide), no tile flips, and doesn't scale sprites. So the controller,
+  (the controller needs 193 at 232 px wide, shading included), no tile flips, and doesn't scale sprites. So the controller,
   LED and pressed-button highlights all live in BG2 (highlights are palette entries, so they zoom with
   the drawing; superseded the earlier sprite plan, chunk5 F7). The LED colour is a BG2 palette entry. Settings text is BG0,
   faded in with alpha blending.
