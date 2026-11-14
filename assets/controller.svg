@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 144.5 82" width="144.5mm" height="82mm">
+<!-- wgc-gba-tx-ui: Game Boy Advance (AGB-001) front, our own drawing from a dimension table
+     (tools/gen_controller_svg.py). Units: mm. Part ids are used by the asset pipeline;
+     colours here are only a preview (the ROM assigns palette roles by class/id).
+     Provisional dimensions (to be checked with callipers): btn_a, btn_b, btn_select, btn_start, dpad, height, lcd_centre, lcd_size, led, lens, lens_r_bottom, lens_r_top, outline_bottom, outline_end, outline_top, plate, shoulder_l, speaker, top_slot, width -->
+<style>.body{fill:#5040a8}.shoulder{fill:#382c80}.lens{fill:#202030}.lcd{fill:#b0d890}.button{fill:#3c3c4c}.plate{fill:#3c3090}.slot{fill:#281c60}.led{fill:#58e070}</style>
+<path id="shoulder-l" class="shoulder" d="M3,21.1 C3.67,17.45 5.08,11.93 7,9.6 C8.92,7.27 10.83,8.27 14.5,7.1 C18.17,5.93 26.58,1.62 29,2.6 C31.42,3.58 31.42,10.52 29,13 C26.58,15.48 18.17,16.33 14.5,17.5 C10.83,18.67 8.92,17.67 7,20 C5.08,22.33 3.67,31.32 3,31.5 C2.33,31.68 2.33,24.75 3,21.1 Z"/>
+<path id="shoulder-r" class="shoulder" d="M141.5,31.5 C140.83,31.32 139.42,22.33 137.5,20 C135.58,17.67 133.67,18.67 130,17.5 C126.33,16.33 117.92,15.48 115.5,13 C113.08,10.52 113.08,3.58 115.5,2.6 C117.92,1.62 126.33,5.93 130,7.1 C133.67,8.27 135.58,7.27 137.5,9.6 C139.42,11.93 140.83,17.45 141.5,21.1 C142.17,24.75 142.17,31.68 141.5,31.5 Z"/>
+<path id="body" class="body" d="M72.25,0.2 C62.67,0.2 50.71,-0.6 43.5,0.2 C36.29,1 33.83,3.45 29,5 C24.17,6.55 18.17,8.33 14.5,9.5 C10.83,10.67 8.92,9.67 7,12 C5.08,14.33 4.12,19.58 3,23.5 C1.88,27.42 0.75,31.08 0.3,35.5 C-0.15,39.92 0.1,45.25 0.3,50 C0.5,54.75 0.63,60.83 1.5,64 C2.37,67.17 3.33,67.58 5.5,69 C7.67,70.42 10.58,71.17 14.5,72.5 C18.42,73.83 24.17,75.58 29,77 C33.83,78.42 38.67,80.22 43.5,81 C48.33,81.78 53.21,81.58 58,81.7 C62.79,81.82 67.5,81.7 72.25,81.7 C77,81.7 81.71,81.82 86.5,81.7 C91.29,81.58 96.17,81.78 101,81 C105.83,80.22 110.67,78.42 115.5,77 C120.33,75.58 126.08,73.83 130,72.5 C133.92,71.17 136.83,70.42 139,69 C141.17,67.58 142.13,67.17 143,64 C143.87,60.83 144,54.75 144.2,50 C144.4,45.25 144.65,39.92 144.2,35.5 C143.75,31.08 142.62,27.42 141.5,23.5 C140.38,19.58 139.42,14.33 137.5,12 C135.58,9.67 133.67,10.67 130,9.5 C126.33,8.33 120.33,6.55 115.5,5 C110.67,3.45 108.21,1 101,0.2 C93.79,-0.6 81.83,0.2 72.25,0.2 Z"/>
+<path id="lens" class="lens" d="M40.2,8.6 H104.3 A6,6 0 0 1 110.3,14.6 V62.9 A12,12 0 0 1 98.3,74.9 H46.2 A12,12 0 0 1 34.2,62.9 V14.6 A6,6 0 0 1 40.2,8.6 Z"/>
+<rect id="lcd" class="lcd" x="42.7" y="16.9" width="61.2" height="40.8"/>
+<path id="top-slot" class="slot" d="M65.9,6.3 L78.6,6.3 A1.9,1.9 0 0 0 78.6,2.5 L65.9,2.5 A1.9,1.9 0 0 0 65.9,6.3 Z"/>
+<circle id="led" class="led" cx="118.5" cy="14.4" r="1.5"/>
+<rect id="dpad-up" class="button" x="17.4" y="26.25" width="5.6" height="5.65" rx="0.6"/>
+<rect id="dpad-down" class="button" x="17.4" y="37.5" width="5.6" height="5.65" rx="0.6"/>
+<rect id="dpad-left" class="button" x="11.75" y="31.9" width="5.65" height="5.6" rx="0.6"/>
+<rect id="dpad-right" class="button" x="23" y="31.9" width="5.65" height="5.6" rx="0.6"/>
+<rect id="dpad-centre" class="button" x="17.4" y="31.9" width="5.6" height="5.6"/>
+<circle id="btn-a" class="button" cx="131.4" cy="31.5" r="4.3"/>
+<circle id="btn-b" class="button" cx="119.3" cy="35.9" r="4.3"/>
+<path id="start-plate" class="plate" d="M17.1,53.01 L29.71,56.15 A1.6,1.6 0 0 0 30.49,53.05 L17.87,49.9 A1.6,1.6 0 0 0 17.1,53.01 Z"/>
+<circle id="btn-start" class="button" cx="30.1" cy="54.6" r="2"/>
+<path id="select-plate" class="plate" d="M17.1,61.31 L29.71,64.45 A1.6,1.6 0 0 0 30.49,61.35 L17.87,58.2 A1.6,1.6 0 0 0 17.1,61.31 Z"/>
+<circle id="btn-select" class="button" cx="30.1" cy="62.9" r="2"/>
+<path id="speaker-1" class="slot" d="M115.39,51.78 L129.75,48.2 A0.8,0.8 0 0 0 129.37,46.64 L115.01,50.22 A0.8,0.8 0 0 0 115.39,51.78 Z"/>
+<path id="speaker-2" class="slot" d="M115.39,54.78 L129.75,51.2 A0.8,0.8 0 0 0 129.37,49.64 L115.01,53.22 A0.8,0.8 0 0 0 115.39,54.78 Z"/>
+<path id="speaker-3" class="slot" d="M115.39,57.78 L129.75,54.2 A0.8,0.8 0 0 0 129.37,52.64 L115.01,56.22 A0.8,0.8 0 0 0 115.39,57.78 Z"/>
+<path id="speaker-4" class="slot" d="M115.39,60.78 L129.75,57.2 A0.8,0.8 0 0 0 129.37,55.64 L115.01,59.22 A0.8,0.8 0 0 0 115.39,60.78 Z"/>
+<path id="speaker-5" class="slot" d="M115.39,63.78 L129.75,60.2 A0.8,0.8 0 0 0 129.37,58.64 L115.01,62.22 A0.8,0.8 0 0 0 115.39,63.78 Z"/>
+<path id="speaker-6" class="slot" d="M115.39,66.78 L129.75,63.2 A0.8,0.8 0 0 0 129.37,61.64 L115.01,65.22 A0.8,0.8 0 0 0 115.39,66.78 Z"/>
+</svg>
