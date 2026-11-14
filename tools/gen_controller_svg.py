@@ -41,20 +41,22 @@ D = {
     'shoulder_l':       ((4.5, 33.0, 2.4, 0), 'P'),      # x0, x1, rise above the body edge, (unused)
     # Screen lens and LCD
     'lens':             ((34.44, 8.98, 110.06, 73.08), 'C'), # x0, y0, x1, y1: 75.63 x 64.10 at (0, 0.17)
-    'lens_r_top':       (6.0, 'P'),
-    'lens_r_bottom':    (12.0, 'P'),
+    'lens_r_top':       (4.96, 'C'),                         # screen_lens.py corner arcs
+    'lens_r_bottom':    (8.03, 'C'),
     'lcd_size':         ((61.0, 39.5), 'C'),                 # screen_bezel window 61.01 x 39.54
     'lcd_centre':       ((72.25, 37.3), 'C'),                # the anchor: cad (0, 3.90)
     'top_slot':         ((72.25, 4.4, 16.5, 3.8), 'P'),      # centre x, centre y, length, height
     'led':              ((118.4, 14.55, 1.2), 'C'),          # power_led (46.15, 26.65), d 2.37
     # Controls
-    'dpad':             ((19.71, 34.08, 16.9, 5.6), 'C'),    # centre from cad (-52.54, 7.12); span/arm still P
-    'btn_a':            ((131.33, 31.85, 4.3), 'C'),         # cad (59.08, 9.35); radius still P
-    'btn_b':            ((118.33, 36.35, 4.3), 'C'),         # cad (46.08, 4.85); radius still P
+    'dpad':             ((19.71, 34.08, 17.55, 5.75), 'C'),  # centre cad (-52.54, 7.12); span, arm: dpad.py
+    'btn_a':            ((131.33, 31.85, 4.5), 'C'),         # cad (59.08, 9.35); r = button_a.py SHAFT_RADIUS
+    'btn_b':            ((118.33, 36.35, 4.5), 'C'),         # cad (46.08, 4.85)
     'btn_start':        ((29.32, 53.97, 2.0), 'C'),          # cad (-42.93, -12.77); START above SELECT
     'btn_select':       ((29.32, 61.97, 2.0), 'C'),          # cad (-42.93, -20.77)
-    'plate':            ((13.0, 3.2, 14.0), 'P'),            # length to the button centre, thickness, slope deg
-    'speaker':          ((115.2, 51.0, 14.8, 1.6, 3.0, -14.0, 6), 'P'),  # x0, y0, length, width, pitch, slope deg, count
+    'plate':            ((24.0, 52.72, 60.72, 16.94, 5.98, 13.94), 'C'),  # START/SELECT recess (shell.front.py _SS_*):
+                                                         # centre x, START cy, SELECT cy, length, width, slope deg
+    'speaker':          ((121.59, 50.79, 16.72, 1.57, 3.0, -13.95, 5), 'C'),  # shell.front.py _GRILLE_*: centre x,
+                                                         # top slot cy, length, width, pitch, slope deg, count
 }
 
 
@@ -142,20 +144,21 @@ def build():
                                            f'width="{f(arm)}" height="{f(arm)}"/>'))
     circle('btn-a', 'button', *v('btn_a'))
     circle('btn-b', 'button', *v('btn_b'))
-    # start / select: a slanted label plate ending in the round button (START above SELECT)
-    plen, pth, slope = v('plate')
-    for name in ('start', 'select'):
-        bx, by, br = v(f'btn_{name}')
-        ang = math.radians(slope)
-        px0, py0 = bx - plen * math.cos(ang), by - plen * math.sin(ang)
-        path(f'{name}-plate', 'plate', slanted_pill(px0, py0, bx, by, pth))
-        circle(f'btn-{name}', 'button', bx, by, br)
+    # start / select: the slanted recess in the shell, the round button at its right end (START above)
+    pcx, start_cy, select_cy, plen, pth, slope = v('plate')
+    ang = math.radians(slope)
+    half = (plen - pth) / 2   # centre to cap centre
+    dx, dy = half * math.cos(ang), half * math.sin(ang)
+    for name, pcy in (('start', start_cy), ('select', select_cy)):
+        path(f'{name}-plate', 'plate', slanted_pill(pcx - dx, pcy - dy, pcx + dx, pcy + dy, pth))
+        circle(f'btn-{name}', 'button', *v(f'btn_{name}'))
     # speaker grille
-    sx0, sy0, sln, swd, pitch, sslope, count = v('speaker')
+    scx, scy, sln, swd, pitch, sslope, count = v('speaker')
     ang = math.radians(sslope)
+    dx, dy = (sln - swd) / 2 * math.cos(ang), (sln - swd) / 2 * math.sin(ang)
     for i in range(count):
-        y = sy0 + i * pitch
-        path(f'speaker-{i + 1}', 'slot', slanted_pill(sx0, y, sx0 + sln * math.cos(ang), y + sln * math.sin(ang), swd))
+        y = scy + i * pitch
+        path(f'speaker-{i + 1}', 'slot', slanted_pill(scx - dx, y - dy, scx + dx, y + dy, swd))
 
     provisional = sorted(k for k, (_, tag) in D.items() if tag == 'P')
     from_cad = sorted(k for k, (_, tag) in D.items() if tag == 'C')

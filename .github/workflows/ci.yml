@@ -29,6 +29,9 @@ jobs:
           path: |
             build/wgc-gba-tx-ui.gba
             build/v11b/wgc-gba-tx-ui.gba
+            LICENSE
+            LICENSES.md
+            assets/fonts/OFL.txt
 
   mutation:
     # ~45-60 min: runs on pushes to main (and by hand), not on every branch push or PR

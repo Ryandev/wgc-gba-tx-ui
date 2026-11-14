@@ -75,7 +75,9 @@ Phase = build order (see §2).
   The mockups `09_*` used the DXF trace, and
   **no text labels**. Buttons are recognised by where they are. All 10 inputs, including L/R and
   Start/Select, light up individually.
-- Built from sprites over a BG layer. Updates on VBlank from the same key state the IRQ sent.
+- One affine BG (BG2) generated from `assets/controller.svg`, one palette entry per part: a press
+  lights its part with one palette write in VBlank, from the same key state the IRQ sent (no sprites,
+  no tile or map traffic; ENGINEERING.md §6).
 - *Accept:* every one of the 10 buttons lights within 1 frame of press, and chords (e.g. L+R+A+Up)
   show correctly.
 
@@ -143,6 +145,7 @@ countdown bar. It all hides after about 3 s from the last L/R press. See `mockup
   - **About:** ROM and protocol version, assumed channel/address/packets, and **"FREE + OPEN
     SOURCE" with the GitHub repo URL**: `github.com/Ryandev/wgc-gba-tx-ui`, on two lines on screen
     (`GITHUB.COM/RYANDEV/` + `WGC-GBA-TX-UI`). Layout in `mockups/32_*`.
+    Also a font credit line, e.g. `FONT: PRESS START 2P (OFL)` (OFL 1.1 notice; LICENSES.md).
     The send rate moves to Stats.
 - **Boot order (fixed after Gemini review F2, 2026-11-14):** read the keys **before** sending
   anything.
@@ -166,9 +169,9 @@ countdown bar. It all hides after about 3 s from the last L/R press. See `mockup
   as the combo fires). See `mockups/33_settings_zoom_storyboard.png`. On boot-time entry (Start
   held) the same zoom runs straight after the splash.
   **Layer plan (Gemini F8):** affine BG2 (mode 1) is 8bpp, one 256-colour palette, max 256 tiles
-  (the controller needs about 189), no tile flips, and doesn't scale sprites. So the controller and LED live
-  in BG2. Pressed-button highlights are sprites (OBJ) during play and are **hidden on zoom frame 1**
-  (input is paused then anyway). The LED colour is a BG2 palette entry. Settings text is BG0,
+  (the controller needs 146 at 216 px wide), no tile flips, and doesn't scale sprites. So the controller,
+  LED and pressed-button highlights all live in BG2 (highlights are palette entries, so they zoom with
+  the drawing; superseded the earlier sprite plan, chunk5 F7). The LED colour is a BG2 palette entry. Settings text is BG0,
   faded in with alpha blending.
 - GB mode is also a toggle under Input. Holding A at boot still works.
 - Without storage, the hub says "CHANGES LAST UNTIL POWER OFF".
@@ -370,9 +373,10 @@ licence are still to be decided. Before publishing:
 - **Leave out vendor files.** `reference/stock-rom/*.gba` (insideGadgets binaries), the manual PDF
   and `reference/photos/*` are insideGadgets material (CC BY-NC / NC-SA, or no stated licence).
   Link to the insideGadgets downloads instead of re-hosting them. The SHA-256 list can stay.
-- **Font:** the mockups use the libgba console font lifted from the stock ROM. The real ROM should
-  use a font with a clear licence (e.g. libtonc's built-in font, or an original one) and must not
-  ship the extracted bytes.
+- **Font:** the mockups use the libgba console font lifted from the stock ROM; the ROM doesn't.
+  Decided 2026-11-14: **Press Start 2P** (SIL OFL 1.1), rendered at build time
+  (`assets/fonts/`, `tools/ttf_to_tfont.py`). Every release ships `assets/fonts/OFL.txt` and
+  `LICENSES.md` next to the ROM (CI's ROM artifact already does), and About credits the font.
 - **Naming:** say "for the insideGadgets Wireless Gameboy Controller", without their logo, and
   make clear it isn't official. Credit insideGadgets for the hardware and protocol design.
 - The reverse-engineered protocol notes (`HARDWARE.md`) are our own write-up and fine to publish,

@@ -215,7 +215,7 @@ mutate: $(B)/emu_harness $(DEPS)/.stamp
 # ---- static analysis / style (ENGINEERING.md §2) ------------------------------------------
 LINT_SRC  := $(SRC_C)
 LINT_DEFS := -DPROTOCOL_$(PROTOCOL)
-TIDY_ARGS := --target=armv4t-none-eabi -mthumb -std=gnu17 -isystem $(TONC)/include -isystem /usr/include/newlib $(LINT_DEFS)
+TIDY_ARGS := --target=armv4t-none-eabi -mthumb -std=gnu17 -isystem $(TONC)/include -isystem /usr/include/newlib -I$(B)/gen $(LINT_DEFS)
 FMT_SRC   := $(wildcard src/*.c src/*.h src/core/*.c src/core/*.h tests/unit/*.c) tools/emu_harness.c
 
 lint: $(DEPS)/.stamp
@@ -223,12 +223,13 @@ lint: $(DEPS)/.stamp
 	@$(MAKE) --no-print-directory -s lint-one PROTOCOL=V11B
 	@echo "lint: OK (V11A + V11B, sources and tests)"
 
-lint-one: $(DEPS)/.stamp
+# Generated headers must exist before src/ is linted (it may include them; chunk5 F1)
+lint-one: $(DEPS)/.stamp $(GEN_H)
 	@echo "lint: $(PROTOCOL) gcc -fanalyzer"
 	@# -Wno-analyzer-use-of-uninitialized-value: GCC 13 false positive on memcpy from a fully
 	@# string-initialised char array (main.c at()/buf, checked by hand 2026-11-14). ENGINEERING.md §2.
 	@for f in $(LINT_SRC); do $(CC) $(ARCH) -mthumb -O2 -std=gnu17 $(WARN) -fanalyzer \
-	  -Wno-analyzer-use-of-uninitialized-value -isystem $(TONC)/include \
+	  -Wno-analyzer-use-of-uninitialized-value -isystem $(TONC)/include -I$(B)/gen \
 	  $(LINT_DEFS) -c $$f -o /dev/null || exit 1; done
 	@echo "lint: clang-tidy"
 	@# "N warnings generated" counts third-party header warnings that HeaderFilterRegex hides
@@ -238,7 +239,7 @@ lint-one: $(DEPS)/.stamp
 	  2>&1 | { grep -v -e 'warnings generated' -e '^\[[0-9]*/[0-9]*\] Processing' || true; }
 	@echo "lint: cppcheck"
 	@cppcheck -q --std=c11 --enable=warning,style,performance,portability --inline-suppr --error-exitcode=1 \
-	  --suppress=missingIncludeSystem --suppress='*:$(DEPS)/*' $(LINT_DEFS) -I src -I $(TONC)/include src/
+	  --suppress=missingIncludeSystem --suppress='*:$(DEPS)/*' $(LINT_DEFS) -I src -I $(B)/gen -I $(TONC)/include src/
 	@echo "lint: $(PROTOCOL) OK"
 
 format:
@@ -263,4 +264,4 @@ run: $(B)/$(NAME).gba
 
 clean:
 	rm -rf $(B)/obj $(B)/tonc $(B)/*.o $(B)/*.a $(B)/*.elf $(B)/*.gba $(B)/*.map $(B)/gbafix $(B)/emu_harness \
-	  $(B)/unit $(B)/unit-fast $(B)/.protocol-* $(B)/coverage* $(B)/v11b $(B)/mutate* $(B)/shots $(B)/visual
+	  $(B)/unit $(B)/unit-fast $(B)/.protocol-* $(B)/coverage* $(B)/v11b $(B)/mutate* $(B)/shots $(B)/visual $(B)/gen

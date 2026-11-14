@@ -25,7 +25,8 @@ make lint            # gcc -fanalyzer + clang-tidy + cppcheck
 make check           # format-check + lint + coverage + protocol/timing + visual (CI + pre-push hook)
 make hooks           # once per clone: pushes run `make check` first
 ```
-Needs Ubuntu packages `gcc-arm-none-eabi binutils-arm-none-eabi libnewlib-arm-none-eabi build-essential git`
+Needs Ubuntu packages `gcc-arm-none-eabi binutils-arm-none-eabi libnewlib-arm-none-eabi build-essential git
+python3-pil librsvg2-bin` (the last two generate the graphics and font)
 (+ `libmgba-dev` for tests, `cppcheck clang-tidy clang-format gcovr` for lint and coverage, `mgba-qt` to play).
 CI (`.github/workflows/ci.yml`) runs `make check` on every push and PR on Ubuntu 24.04. libtonc, the GBA crt0 and gbafix are fetched from
 GitHub at pinned commits by `scripts/fetch_deps.sh`.

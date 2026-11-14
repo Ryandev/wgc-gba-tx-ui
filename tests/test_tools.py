@@ -8,8 +8,14 @@ import unittest
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, 'tools'))
+import gen_controller_svg  # noqa: E402
 import svg_to_gba  # noqa: E402
 import ttf_to_tfont  # noqa: E402
+
+def read(path):
+    with open(path) as f:
+        return f.read()
+
 
 FONT = os.path.join(ROOT, 'assets', 'fonts', 'PressStart2P-Regular.ttf')
 
@@ -42,7 +48,7 @@ class TtfToTfont(unittest.TestCase):
             for n in (1, 2):
                 p = os.path.join(d, f'f{n}.c')
                 self.assertEqual(ttf_to_tfont.main([FONT, 'testFont', p]), 0)
-                outs.append(open(p).read())
+                outs.append(read(p))
         self.assertEqual(outs[0], outs[1])
         c = outs[0]
         self.assertIn('static const u32 testFont_glyphs[192]', c)
@@ -94,15 +100,17 @@ class SvgToGba(unittest.TestCase):
     def test_c_output_deterministic(self):
         with tempfile.TemporaryDirectory() as d:
             p = os.path.join(d, 't.svg')
-            open(p, 'w').write(SVG)
+            with open(p, 'w') as f:
+                f.write(SVG)
             outs = []
             for n in (1, 2):
                 o = os.path.join(d, str(n))
                 self.assertEqual(svg_to_gba.main([p, o, '--width', '32', '--name', 'tst']), 0)
-                outs.append(open(os.path.join(o, 'tst.c')).read() + open(os.path.join(o, 'tst.h')).read())
+                outs.append(read(os.path.join(o, 'tst.c')) + read(os.path.join(o, 'tst.h')))
         self.assertEqual(outs[0], outs[1])
         self.assertIn('TST_FRONT = 2,', outs[0])
-        self.assertIn('const u16 tst_pal[3]', outs[0])
+        self.assertIn('const u16 tst_pal[4]', outs[0])   # 3 used, padded to whole words
+        self.assertIn('#define TST_PAL_LEN 3', outs[0])
         self.assertIn('0x0000, 0x001F, 0x07E0', outs[0])
 
     def test_rejects_too_many_tiles_and_invisible_parts(self):
@@ -116,14 +124,53 @@ class SvgToGba(unittest.TestCase):
         with self.assertRaises(ValueError):
             svg_to_gba.label_map(tiny, 32)
 
+    def test_tile_pixel_order_and_word_packing(self):
+        # One pixel lit at (x=1, y=0) and one at (x=0, y=2) inside tile 0: row-major, little endian.
+        from PIL import Image
+        img = Image.new('L', (8, 8), 0)
+        img.putpixel((1, 0), 5)
+        img.putpixel((0, 2), 7)
+        tiles, amap = svg_to_gba.tiles_and_map(img)
+        self.assertEqual(amap[0], 1)
+        self.assertEqual(tiles[1][1], 5)
+        self.assertEqual(tiles[1][16], 7)
+        hdr, src, _ = svg_to_gba.emit('t', 'x.svg', img, [('p', 'a')], {}, tiles, amap)
+        # tile 1 starts at word 16: bytes 0..3 = 00 05 00 00 -> 0x00000500; bytes 16..19 -> word 20 = 0x00000007
+        words = src.split('t_tiles[32]')[1].split('};')[0].replace('\n', ' ').split(',')
+        words = [w.strip(' ={') for w in words if w.strip(' ={')]
+        self.assertEqual(words[16], '0x00000500')
+        self.assertEqual(words[20], '0x00000007')
+        # map: entry 0 = tile 1 in the low byte of the first word
+        self.assertIn('t_map[256] __attribute__((aligned(4))) = {\n    0x00000001,', src)
+
+    def test_nested_groups_any_attribute_order(self):
+        svg = ('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 16"><style>.a{fill:#200000}</style>'
+               '<g id="layer1" class="a"><rect x="0" y="0" width="16" height="16" id="back"/>'
+               '<g><rect class="b" style="fill:#000" id="front" x="8" y="0" width="8" height="8"/></g></g></svg>')
+        labels, parts = svg_to_gba.label_map(svg, 32)
+        self.assertEqual(parts, [('back', 'a'), ('front', 'b')])   # class inherited from the group
+        px = labels.load()
+        self.assertEqual((px[0, 0], px[8, 0], px[8, 8], px[20, 0]), (1, 2, 1, 0))
+
+    def test_rejects_duplicate_or_unsafe_ids(self):
+        with self.assertRaises(ValueError):
+            svg_to_gba.parts_of(SVG.replace('id="front"', 'id="back"'))
+        with self.assertRaises(ValueError):
+            svg_to_gba.parts_of(SVG.replace('id="front"', 'id="front:1"'))
+
+    def test_committed_svg_matches_its_generator(self):
+        svg, _ = gen_controller_svg.build()
+        self.assertEqual(svg, read(os.path.join(ROOT, 'assets', 'controller.svg')),
+                         'assets/controller.svg is stale: run python3 tools/gen_controller_svg.py')
+
     def test_real_drawing_fits(self):
-        svg = open(os.path.join(ROOT, 'assets', 'controller.svg')).read()
+        svg = read(os.path.join(ROOT, 'assets', 'controller.svg'))
         labels, parts = svg_to_gba.label_map(svg, 216)
         tiles, _ = svg_to_gba.tiles_and_map(labels)
         self.assertLessEqual(len(tiles), svg_to_gba.MAX_TILES)
-        self.assertEqual(len(parts), 24)
+        self.assertEqual(len(parts), 23)
         # every part is visible (none fully hidden under a later one)
-        self.assertEqual(set(labels.getdata()), set(range(len(parts) + 1)))
+        self.assertEqual({i for i, n in enumerate(labels.histogram()) if n}, set(range(len(parts) + 1)))
 
 
 if __name__ == '__main__':

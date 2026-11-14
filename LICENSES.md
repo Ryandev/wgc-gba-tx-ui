@@ -16,11 +16,13 @@ outline; layout values read from the owner's own giant-GBA CAD model, the rest p
 third-party drawing or model is copied or traced into the repo. It carries no lettering or logos.
 
 **About the font:** the OFL lets us embed the font in the ROM and redistribute it, provided the
-licence and copyright notice go with it (`assets/fonts/OFL.txt`) and the font is not sold on its
-own. The ROM's glyph table (`tools/ttf_to_tfont.py`) is a rendering of the font, not a renamed
-copy of it, and is credited as "glyphs rendered from Press Start 2P". If we ever edit glyphs, the
-result must not be called "Press Start 2P" (Reserved Font Name) and stays under the OFL. The About
-screen will carry the same credit.
+licence and copyright notice go with every copy and the font is not sold on its own. So the TTF
+sits next to `assets/fonts/OFL.txt`, CI's ROM downloads include `OFL.txt` and this file, and
+releases must too. The ROM's glyph table (`tools/ttf_to_tfont.py`: 96 ASCII glyphs converted to a
+1bpp bitmap) counts as an OFL **Modified Version** (OFL §"Definitions": changing formats or porting
+to a new environment). It therefore stays under the OFL and must not use the Reserved Font Name:
+it's called `ps2pFont` in code and credited as "glyphs rendered from Press Start 2P". The About
+screen carries the credit (SPEC.md).
 
 Unofficial project, not affiliated with insideGadgets or Nintendo. "Game Boy Advance" is a
 Nintendo trademark, used only to describe what the controller is. The cart protocol notes are
