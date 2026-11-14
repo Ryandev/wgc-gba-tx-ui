@@ -1,0 +1,30 @@
+{
+  "type": "object",
+  "required": ["summary", "findings"],
+  "properties": {
+    "summary": { "type": "string", "description": "3-6 sentences: overall verdict, biggest risk" },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "severity", "kind", "target", "finding", "evidence", "suggestion", "confidence"],
+        "properties": {
+          "id":         { "type": "string", "description": "F1, F2, ..." },
+          "severity":   { "type": "string", "enum": ["critical", "high", "medium", "low"] },
+          "kind":       { "type": "string", "enum": ["wrong", "unproven", "risk", "missing", "simplify", "challenges-owner-decision"] },
+          "claim":      { "type": "string", "description": "claim id from the brief (C1...) or 'none'" },
+          "target":     { "type": "string", "description": "file:line or doc section" },
+          "finding":    { "type": "string" },
+          "evidence":   { "type": "string", "description": "file:line quotes, source URLs, or a concrete failure scenario" },
+          "suggestion": { "type": "string" },
+          "confidence": { "type": "string", "enum": ["high", "medium", "low"] }
+        }
+      }
+    },
+    "claims_not_broken": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "claim ids you tried and failed to break, with one line on what you checked"
+    }
+  }
+}
