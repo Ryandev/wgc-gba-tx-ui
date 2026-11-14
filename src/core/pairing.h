@@ -9,7 +9,8 @@ enum { PAIR_CHANNEL, PAIR_ADDRESS, PAIR_PACKETS, PAIR_ROWS };
 typedef struct {
     uint8_t val[PAIR_ROWS]; // current values
     int row;                // selected row
-    int held;               // frames Left/Right has been held (for auto-repeat)
+    int held;               // frames the current Left/Right direction has been held (auto-repeat)
+    uint16_t dir;           // Left/Right mask held last frame (a change = a new press)
 } pairing_state;
 
 typedef enum { PAIR_NONE, PAIR_SEND } pairing_action;

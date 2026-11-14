@@ -142,21 +142,54 @@ static void test_row_change_while_holding_does_not_repeat_on_new_row(void)
 static void test_direction_switch_restarts_repeat(void)
 {
     pairing_init(&p, 50, 1, 1);
-    hold(K_RIGHT, PAIR_REPEAT_DELAY);                 // 51, about to repeat
-    pairing_step(&p, K_LEFT, K_LEFT | K_RIGHT);       // Left pressed while Right still held
-    TEST_ASSERT_EQUAL_UINT8(50, p.val[PAIR_CHANNEL]); // the Left press counts once
+    hold(K_RIGHT, PAIR_REPEAT_DELAY);           // 51, about to repeat
+    pairing_step(&p, K_LEFT, K_LEFT | K_RIGHT); // both held = no direction: no step (chunk2 F5)
+    TEST_ASSERT_EQUAL_UINT8(51, p.val[PAIR_CHANNEL]);
+    for (int f = 0; f < PAIR_REPEAT_DELAY + 5; f++) pairing_step(&p, 0, K_LEFT | K_RIGHT);
+    TEST_ASSERT_EQUAL_UINT8(51, p.val[PAIR_CHANNEL]); // and no repeat while both are held
+    pairing_step(&p, 0, K_LEFT); // release Right: Left is now the held direction = a new press
+    TEST_ASSERT_EQUAL_UINT8(50, p.val[PAIR_CHANNEL]);
     pairing_step(&p, 0, K_LEFT);
-    TEST_ASSERT_EQUAL_UINT8(50, p.val[PAIR_CHANNEL]); // and the repeat restarted
+    TEST_ASSERT_EQUAL_UINT8(50, p.val[PAIR_CHANNEL]); // repeat restarted from that press
+}
+
+static void test_release_stops_repeat(void)
+{
+    pairing_init(&p, 1, 1, 1);
+    hold(K_RIGHT, PAIR_REPEAT_DELAY); // 2, about to repeat
+    for (int f = 0; f < PAIR_REPEAT_DELAY + 2 * PAIR_REPEAT_EVERY; f++) pairing_step(&p, 0, 0);
+    TEST_ASSERT_EQUAL_UINT8(2, p.val[PAIR_CHANNEL]); // idle frames never step
+    TEST_ASSERT_EQUAL_INT(0, p.held);
+}
+
+static void test_row_moves_on_the_press_frame_and_stops_at_the_ends(void)
+{
+    pairing_step(&p, K_UP, K_UP); // row 0, Up held (no release): must stay 0, never -1
+    TEST_ASSERT_EQUAL_INT(PAIR_CHANNEL, p.row);
+    pairing_step(&p, K_DOWN, K_DOWN);
+    TEST_ASSERT_EQUAL_INT(PAIR_ADDRESS, p.row);
+    pairing_step(&p, K_DOWN, K_DOWN);
+    TEST_ASSERT_EQUAL_INT(PAIR_PACKETS, p.row);
+    pairing_step(&p, K_DOWN, K_DOWN); // already last: stays, never PAIR_ROWS
+    TEST_ASSERT_EQUAL_INT(PAIR_PACKETS, p.row);
+    pairing_step(&p, K_UP | K_RIGHT, K_UP | K_RIGHT); // Up + Right together: row then value
+    TEST_ASSERT_EQUAL_INT(PAIR_ADDRESS, p.row);
+    TEST_ASSERT_EQUAL_UINT8(2, p.val[PAIR_ADDRESS]);
 }
 
 static void test_invalid_row_is_safe(void)
 {
     TEST_ASSERT_EQUAL_UINT8(0, pairing_min(-1));
     TEST_ASSERT_EQUAL_UINT8(0, pairing_max(PAIR_ROWS));
-    p.row = 99;
-    pairing_step(&p, K_RIGHT, K_RIGHT);
-    TEST_ASSERT_EQUAL_INT(PAIR_CHANNEL, p.row);
-    TEST_ASSERT_EQUAL_UINT8(2, p.val[PAIR_CHANNEL]);
+    TEST_ASSERT_EQUAL_UINT8(4, pairing_max(PAIR_ROWS - 1)); // last valid row is still valid
+    TEST_ASSERT_EQUAL_UINT8(1, pairing_min(0));
+    for (int bad = -1; bad <= PAIR_ROWS; bad += PAIR_ROWS + 1) { // -1 and PAIR_ROWS
+        pairing_init(&p, 1, 1, 1);
+        p.row = bad;
+        pairing_step(&p, K_RIGHT, K_RIGHT);
+        TEST_ASSERT_EQUAL_INT(PAIR_CHANNEL, p.row);
+        TEST_ASSERT_EQUAL_UINT8(2, p.val[PAIR_CHANNEL]);
+    }
 }
 
 static void test_a_sends_without_changing_values(void)
@@ -183,6 +216,8 @@ int main(void)
     RUN_TEST(test_row_change_while_holding_does_not_repeat_on_new_row);
     RUN_TEST(test_direction_switch_restarts_repeat);
     RUN_TEST(test_invalid_row_is_safe);
+    RUN_TEST(test_release_stops_repeat);
+    RUN_TEST(test_row_moves_on_the_press_frame_and_stops_at_the_ends);
     RUN_TEST(test_a_sends_without_changing_values);
     return UNITY_END();
 }

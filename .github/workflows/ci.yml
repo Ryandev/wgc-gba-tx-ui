@@ -2,10 +2,12 @@ name: ci
 on:
   push:
   pull_request:
+  workflow_dispatch:
 
 jobs:
   check:
-    runs-on: ubuntu-24.04   # same Ubuntu packages as the dev machine (GCC 13.2, newlib, mGBA 0.10)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20   # same Ubuntu packages as the dev machine (GCC 13.2, newlib, mGBA 0.10)
     steps:
       - uses: actions/checkout@v4
       - name: Install toolchain
@@ -29,8 +31,11 @@ jobs:
             build/v11b/wgc-gba-tx-ui.gba
 
   mutation:
+    # ~45-60 min: runs on pushes to main (and by hand), not on every branch push or PR
+    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
     needs: check
     runs-on: ubuntu-24.04
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
       - name: Install toolchain

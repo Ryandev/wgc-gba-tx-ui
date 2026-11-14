@@ -18,7 +18,7 @@ void link_gb_mode(void)
 
 void link_pair(u8 channel, u8 address, u8 packets)
 {
-    u16 msg[5]; // mutate: equivalent (a larger buffer changes nothing)
+    u16 msg[5]; // mutate: equivalent[dec const +1] (a larger buffer changes nothing)
     kw_config_bytes(channel, address, packets, msg);
     link_sync(); // boot-time Settings hasn't sent sync yet; the ATtiny needs it first (stock order)
     for (int i = 0; i < 5; i++) link_write(msg[i]);
@@ -31,14 +31,14 @@ static void link_tick(void)
     link_write(kw_hi(w));
     link_write(kw_lo(w));
     link_last_word = w;
-    link_packets++; // mutate: equivalent for ++ -> -- (UI only checks the counter changed)
+    link_packets++; // mutate: equivalent[++ -> --] (its only reader checks that it changed)
 }
 
 void link_start(void)
 {
     // 16.78 MHz / 64 = 262144 Hz; 524 ticks = 1.999 ms
     REG_TM3CNT = 0;
-    REG_TM3D = (u16)(0x10000 - 524); // mutate: equivalent (+-1 tick = 4 us, inside the 2.2 ms budget)
+    REG_TM3D = (u16)(0x10000 - 524); // mutate: equivalent[hex const +1, dec const +1] (+-1 tick = 4 us)
     // Priority 0 = first in libtonc's ISR table: the send always runs before any other handler
     // (the master ISR scans in order with IME off). SPEC.md §0 rule 7.
     irq_set(II_TIMER3, link_tick, ISR_PRIO(0));

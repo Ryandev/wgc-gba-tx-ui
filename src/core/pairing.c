@@ -24,6 +24,7 @@ void pairing_init(pairing_state *p, uint8_t channel, uint8_t address, uint8_t pa
     p->val[PAIR_PACKETS] = clamp(PAIR_PACKETS, packets);
     p->row = PAIR_CHANNEL;
     p->held = 0;
+    p->dir = 0;
 }
 
 pairing_action pairing_step(pairing_state *p, uint16_t hit, uint16_t down)
@@ -34,27 +35,36 @@ pairing_action pairing_step(pairing_state *p, uint16_t hit, uint16_t down)
     if (hit & K_A) {
         return PAIR_SEND;
     }
-    // Any new direction press restarts the repeat: changing row or switching Left/Right while
-    // the other is held must not inherit a running auto-repeat (Gemini chunk1 F3).
-    if (hit & (K_LEFT | K_RIGHT | K_UP | K_DOWN)) {
-        p->held = 0;
+    // Left/Right follow the *held* direction, for the press and the repeat alike (chunk2 F5):
+    // a change in the held mask is a new press, and holding both is "no direction".
+    const uint16_t lr = down & (K_LEFT | K_RIGHT);
+    const int new_dir = lr != p->dir;
+    p->dir = lr;
+    if ((hit & (K_UP | K_DOWN)) || new_dir) {
+        p->held = 0; // changing row or direction never inherits a running auto-repeat
     }
-    if ((hit & K_UP) && p->row > 0) p->row--;
-    if ((hit & K_DOWN) && p->row < PAIR_ROWS - 1) p->row++;
+    if ((hit & K_UP) && p->row > 0) {
+        p->row--;
+    }
+    if ((hit & K_DOWN) && p->row < PAIR_ROWS - 1) {
+        p->row++;
+    }
 
+    int sign = 0;
+    if (lr == K_RIGHT) {
+        sign = 1;
+    } else if (lr == K_LEFT) {
+        sign = -1;
+    }
     int d = 0;
-    if (hit & K_RIGHT) d = 1;
-    if (hit & K_LEFT) d = -1;
-    if (down & (K_LEFT | K_RIGHT)) {
-        // held = 1 on the press frame. First repeat exactly PAIR_REPEAT_DELAY frames after the
-        // press, then one step every PAIR_REPEAT_EVERY frames.
+    if (sign != 0) {
+        // held = 1 on the press frame; first repeat exactly PAIR_REPEAT_DELAY frames later, then
+        // one step every PAIR_REPEAT_EVERY frames.
         p->held++;
-        int since = p->held - 1 - PAIR_REPEAT_DELAY;
-        if (since >= 0 && since % PAIR_REPEAT_EVERY == 0) {
-            d = (down & K_RIGHT) ? 1 : -1;
+        const int since = p->held - 1 - PAIR_REPEAT_DELAY;
+        if (new_dir || (since >= 0 && since % PAIR_REPEAT_EVERY == 0)) {
+            d = sign;
         }
-    } else {
-        p->held = 0;
     }
     uint8_t *v = &p->val[p->row];
     if (d > 0 && *v < s_max[p->row]) {

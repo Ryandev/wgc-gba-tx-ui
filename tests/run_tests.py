@@ -100,8 +100,14 @@ def main():
         s, o = analyse(s_w, proto, s_e), analyse(o_w, proto, o_e)
         probs = list(o['errs'])
         if o['pre'] != s['pre']: probs.append(f"preamble {fmt(o['pre'])} != stock {fmt(s['pre'])}")
-        if sc.get('sync_after_last_key') and o_w and o_k and o_w[0][1] < o_k[-2][1]:
-            probs.append('boot order: sync was sent before the final key press (SPEC §S: Settings sends nothing)')
+        if sc.get('sync_after_a') and o_w:
+            a_press = next((c for _, c, m in o_k if m & 1), None)  # first A press (KEYINPUT bit 0)
+            if a_press is None or o_w[0][1] < a_press:
+                probs.append('boot order: sync sent before A was pressed (SPEC §S: Settings sends nothing)')
+        for k in range(len(o_w) - 1):  # every consecutive pair of writes, incl. preamble -> first word (F8)
+            if o_w[k + 1][1] - o_w[k][1] < MINPAIR:
+                probs.append(f'write spacing {(o_w[k + 1][1] - o_w[k][1]) / CPU_HZ * 1000:.3f} ms < {MIN_PAIR_MS} ms at write {k}')
+                break
         if collapsed(o['pairs']) != collapsed(s['pairs']):
             probs.append(f"pairs {collapsed(o['pairs'])} != stock {collapsed(s['pairs'])}")
         gap, lat, rate = timing(o['pairs'], o_k, proto)

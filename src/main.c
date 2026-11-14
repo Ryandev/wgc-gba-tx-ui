@@ -30,9 +30,10 @@ static void text_init(void)
 static void at(int row, const char *s)
 {
     // Write s at column 0 of `row`, padded with spaces to the full line (clears old text).
-    char buf[TEXT_COLS + 1]; // mutate: equivalent (larger buffer changes nothing)
+    char buf[TEXT_COLS + 1]; // mutate: equivalent[dec const +1] (larger buffer changes nothing)
     int n = (int)strlen(s);
-    if (n > TEXT_COLS) n = TEXT_COLS; // mutate: equivalent (safety clamp; every caller is shorter)
+    if (n > TEXT_COLS)
+        n = TEXT_COLS; // mutate: equivalent[> -> >=, drop if-body] (safety clamp; callers are shorter)
     memcpy(buf, s, (size_t)n);
     memset(buf + n, ' ', (size_t)(TEXT_COLS - n));
     buf[TEXT_COLS] = 0;
@@ -58,7 +59,7 @@ static void pairing_menu(void)
         u16 hit = (u16)(down & ~prev);
         prev = down;
         for (int i = 0; i < PAIR_ROWS; i++) {
-            char line[TEXT_COLS + 1]; // mutate: equivalent for +-1 (menu rows are < 20 chars)
+            char line[TEXT_COLS + 1]; // mutate: equivalent[dec const +1, + -> -] (menu rows are < 20 chars)
             fmt_menu_row(line, sizeof line, name[i], p.val[i], i == p.row);
             at(5 + i, line);
         }
@@ -86,7 +87,8 @@ int main(void)
         // are zeroed before the layer is enabled, so no frame ever shows anything else.
         memset16(pal_bg_mem, 0, BG_PAL_ENTRIES);
         memset16(se_mem[SBB_TEXT], 0, SBB_ENTRIES);
-        REG_BG0CNT = BG_CBB(0) | BG_SBB(SBB_TEXT); // mutate: equivalent (all-black palette: any map is black)
+        REG_BG0CNT = BG_CBB(0) |
+                     BG_SBB(SBB_TEXT); // mutate: equivalent[| -> &, 0 -> 1] (black palette: any map is black)
         REG_DISPCNT = DCNT_MODE0 | DCNT_BG0;
     } else if (plan.screen == SCREEN_OFF) {
         REG_DISPCNT = DCNT_MODE0; // screen "off": plain backdrop, nothing drawn

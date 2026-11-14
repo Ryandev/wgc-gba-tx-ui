@@ -23,12 +23,16 @@ SCENARIOS = {
     '02_showkeys':   dict(ours=['k:B', 'f:60', 'k:-', 'f:5', 'k:A', 'f:5', 'k:^>', 'f:5', 'k:Ss', 'f:5',
                                 'k:lr', 'f:5', 'k:lrA', 'f:5'],
                           note='stock B-at-boot key letters dropped; bytes identical'),
-    '03_config':     dict(ours=['k:S', 'f:60', 'k:-', 'f:10'] + TAP('>') * 6 + TAP('v') * 2 + ['k:A', 'f:5', 'k:-', 'f:30'],
+    # Pairing with three distinct values (7, 4, 2) so swapped arguments can't pass (chunk2 F4), and a
+    # B press afterwards: nothing may be sent after the pairing message (chunk2 F8).
+    '03_config':     dict(ours=['k:S', 'f:60', 'k:-', 'f:10'] + TAP('>') * 6 + TAP('v') + TAP('>') * 3 + TAP('v')
+                           + TAP('>') + ['k:A', 'f:20', 'k:-', 'f:10', 'k:B', 'f:10', 'k:-', 'f:20'],
                           stock=['k:S', 'f:60', 'k:-', 'f:10', 'k:>', 'f:20', 'k:-', 'f:10', 'k:>', 'f:20', 'k:-',
-                                 'f:10', 'k:v', 'f:20', 'k:-', 'f:10', 'k:v', 'f:20', 'k:-', 'f:10', 'k:A', 'f:20',
-                                 'k:-', 'f:30'],
-                          sync_after_last_key=True,  # SPEC §S: boot-time Settings sends nothing until A (pairing)
-                          note='stock reaches CH 7 via auto-repeat; ours taps Right 6x for the same values'),
+                                 'f:10', 'k:v', 'f:3', 'k:-', 'f:20', 'k:>', 'f:20', 'k:-', 'f:20', 'k:v', 'f:3',
+                                 'k:-', 'f:20', 'k:>', 'f:3', 'k:-', 'f:20', 'k:A', 'f:20', 'k:-', 'f:10', 'k:B',
+                                 'f:10', 'k:-', 'f:20'],
+                          sync_after_a=True,  # SPEC §S: boot-time Settings sends nothing until A (pairing)
+                          note='pairs CH 7 / ADDR 4 / PKTS 2 (stock via auto-repeat, ours via taps), then B: no sends'),
     '04_screen_off': dict(ours=['k:s', 'f:60', 'k:-', 'f:5', 'k:A', 'f:5']),
     '05_black':      dict(ours=['k:sv', 'f:60', 'k:-', 'f:5']),
     '06_gbmode':     dict(ours=['k:A', 'f:60', 'k:-', 'f:5']),

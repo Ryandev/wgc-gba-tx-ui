@@ -42,7 +42,7 @@ SRC_C    := $(wildcard src/*.c src/core/*.c)
 SRC_S    := $(wildcard src/*.s)
 OBJS     := $(SRC_C:src/%.c=$(B)/obj/%.o) $(SRC_S:src/%.s=$(B)/obj/%.o)
 
-.PHONY: all deps test test-v11b test-all visual visual-approve baselines unit coverage mutate lint lint-one format format-check check hooks run clean
+.PHONY: all deps test test-v11b test-all visual visual-approve baselines unit unit-fast coverage mutate lint lint-one format format-check check hooks run clean
 all: $(B)/$(NAME).gba
 
 # ---- third-party: fetched at pinned commits, built here ------------------------------------
@@ -71,11 +71,17 @@ $(B)/gbafix: $(DEPS)/.stamp
 
 # ---- our code ------------------------------------------------------------------------------
 # *.iwram.c: hot code for IWRAM, compiled as 32-bit ARM (the linker script places *iwram.* objects)
-$(B)/obj/%.iwram.o: src/%.iwram.c $(DEPS)/.stamp
+# Rebuild when PROTOCOL changes: it isn't a file, so -MMD can't see it (chunk2 review F6)
+$(B)/.protocol-$(PROTOCOL):
+	@mkdir -p $(B)
+	@for f in $(B)/.protocol-*; do [ -f "$$f" ] && unlink "$$f"; done; true
+	@touch $@
+
+$(B)/obj/%.iwram.o: src/%.iwram.c $(DEPS)/.stamp $(B)/.protocol-$(PROTOCOL)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -MMD -MP -marm -c $< -o $@
 
-$(B)/obj/%.o: src/%.c $(DEPS)/.stamp
+$(B)/obj/%.o: src/%.c $(DEPS)/.stamp $(B)/.protocol-$(PROTOCOL)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -MMD -MP -mthumb -c $< -o $@
 
@@ -133,32 +139,51 @@ UNITY     := $(DEPS)/unity/src
 CORE_SRC  := $(wildcard src/core/*.c)
 UNIT_SRC  := $(wildcard tests/unit/test_*.c)
 HOST_CC   := gcc
-HOST_FLAGS = -std=gnu17 -O0 -g $(WARN) -Wno-missing-prototypes -Isrc -I$(UNITY) --coverage
+HOST_FLAGS = -std=gnu17 -O0 -g $(WARN) -Wno-missing-prototypes -Isrc -I$(UNITY)
+
+# build-unit,PROTO,TEST,DIR,EXTRA: compile one test binary. Sources go through realpath, so B and
+# DEPS may be relative or absolute (chunk2 review F1: '$(CURDIR)/' broke absolute DEPS). Exit 2 if
+# anything fails to compile.
+define build-unit
+d=$(3); mkdir -p $$d; objs=; \
+for f in $(2) $(CORE_SRC) $(UNITY)/unity.c; do o=$$d/$$(basename $$f .c).o; \
+  $(HOST_CC) $(HOST_FLAGS) $(4) -DPROTOCOL_$(1) -c $$(realpath $$f) -o $$o || exit 2; objs="$$objs $$o"; done; \
+$(HOST_CC) $(4) -o $$d/$$(basename $(2) .c) $$objs || exit 2
+endef
 
 # Every test binary is built for both protocols (constants differ: split, limits, XY default).
 unit: $(DEPS)/.stamp
-	@rm -rf $(B)/unit && mkdir -p $(B)/unit
+	@mkdir -p $(B)/unit && find $(B)/unit -name '*.gcda' -delete
 	@set -e; for proto in V11A V11B; do for t in $(UNIT_SRC); do \
-	  n=$$(basename $$t .c); d=$(CURDIR)/$(B)/unit/$$proto/$$n; mkdir -p $$d; objs=; \
-	  for f in $$t $(CORE_SRC) $(UNITY)/unity.c; do o=$$d/$$(basename $$f .c).o; \
-	    $(HOST_CC) $(HOST_FLAGS) -DPROTOCOL_$$proto -c $(CURDIR)/$$f -o $$o; objs="$$objs $$o"; done; \
-	  $(HOST_CC) --coverage -o $$d/$$n $$objs; \
+	  n=$$(basename $$t .c); \
+	  $(call build-unit,$$proto,$$t,$(abspath $(B))/unit/$$proto/$$n,--coverage); \
 	  (cd $$d && ./$$n) > $$d/out.txt || { cat $$d/out.txt; echo "unit: $$proto $$n FAILED"; exit 1; }; \
 	  echo "unit: $$proto  $$(grep -E '^[0-9]+ Tests' $$d/out.txt)  $$n"; \
 	done; done
 
-# Coverage of src/core across all unit runs; fails under the thresholds.
+# For mutation testing: only the unit tests in UNIT_TESTS, no coverage, 10 s timeout per binary.
+# Exit 2 = didn't compile, 1 = a test failed, 124 = timed out.
+UNIT_TESTS ?= $(UNIT_SRC)
+unit-fast: $(DEPS)/.stamp
+	@for proto in V11A V11B; do for t in $(UNIT_TESTS); do \
+	  n=$$(basename $$t .c); \
+	  $(call build-unit,$$proto,$$t,$(abspath $(B))/unit-fast/$$proto/$$n,); \
+	  timeout 10 $$d/$$n > $$d/out.txt || exit $$?; \
+	done; done
+
+# Coverage gated per protocol: pooling V11A + V11B could hide a branch only one reaches (chunk2 F6).
 COV_LINE   ?= 100
 COV_BRANCH ?= 100
 coverage: unit
-	@gcovr -r . --object-directory $(B)/unit --filter 'src/core/' --exclude-unreachable-branches \
-	  --print-summary --fail-under-line $(COV_LINE) --fail-under-branch $(COV_BRANCH) \
-	  --html-details $(B)/coverage.html -s | tail -3
+	@for proto in V11A V11B; do echo "coverage: $$proto"; \
+	  gcovr -r . --object-directory $(B)/unit/$$proto --filter 'src/core/' --exclude-unreachable-branches \
+	    --print-summary --fail-under-line $(COV_LINE) --fail-under-branch $(COV_BRANCH) \
+	    --html-details $(B)/coverage_$$proto.html -s | tail -3 || exit 1; done
 
 # ---- mutation testing (ENGINEERING.md §4) ---------------------------------------------------
 # Mutates src/link.c + src/core/*.c, rebuilds the real ARM ROM per mutant, and runs unit tests
 # (both protocols) + the v1.1a emulator suite. Fails if any mutant survives. ~4-6 min.
-MUTATE_SRC ?= src/link.c src/main.c $(CORE_SRC)   # chunk reviews: pairing.c, then main.c were missed
+MUTATE_SRC ?= src/link.c src/main.c $(CORE_SRC) src/core/keyword.h   # reviews: pairing.c, main.c, keyword.h were missed
 mutate: $(B)/emu_harness $(DEPS)/.stamp
 	python3 tests/mutate.py $(MUTATE_SRC)
 
@@ -171,10 +196,7 @@ FMT_SRC   := $(wildcard src/*.c src/*.h src/core/*.c src/core/*.h tests/unit/*.c
 lint: $(DEPS)/.stamp
 	@$(MAKE) --no-print-directory -s lint-one PROTOCOL=V11A
 	@$(MAKE) --no-print-directory -s lint-one PROTOCOL=V11B
-	@echo "lint: clang-tidy (unit tests)"
-	@clang-tidy --quiet $(UNIT_SRC) -- -std=gnu17 -Isrc -I$(UNITY) -DPROTOCOL_V11A \
-	  2>&1 | { grep -v -e 'warnings generated' -e '^\[[0-9]*/[0-9]*\] Processing' || true; }
-	@echo "lint: OK (V11A + V11B + tests)"
+	@echo "lint: OK (V11A + V11B, sources and tests)"
 
 lint-one: $(DEPS)/.stamp
 	@echo "lint: $(PROTOCOL) gcc -fanalyzer"
@@ -186,6 +208,9 @@ lint-one: $(DEPS)/.stamp
 	@echo "lint: clang-tidy"
 	@# "N warnings generated" counts third-party header warnings that HeaderFilterRegex hides
 	@clang-tidy --quiet $(LINT_SRC) -- $(TIDY_ARGS) 2>&1 | { grep -v -e 'warnings generated' -e '^\[[0-9]*/[0-9]*\] Processing' || true; }
+	@echo "lint: clang-tidy (unit tests, $(PROTOCOL))"
+	@clang-tidy --quiet $(UNIT_SRC) -- -std=gnu17 -Isrc -I$(UNITY) $(LINT_DEFS) \
+	  2>&1 | { grep -v -e 'warnings generated' -e '^\[[0-9]*/[0-9]*\] Processing' || true; }
 	@echo "lint: cppcheck"
 	@cppcheck -q --std=c11 --enable=warning,style,performance,portability --inline-suppr --error-exitcode=1 \
 	  --suppress=missingIncludeSystem --suppress='*:$(DEPS)/*' $(LINT_DEFS) -I src -I $(TONC)/include src/
@@ -209,4 +234,4 @@ run: $(B)/$(NAME).gba
 
 clean:
 	rm -rf $(B)/obj $(B)/tonc $(B)/*.o $(B)/*.a $(B)/*.elf $(B)/*.gba $(B)/*.map $(B)/gbafix $(B)/emu_harness \
-	  $(B)/unit $(B)/coverage* $(B)/v11b $(B)/mutate* $(B)/shots $(B)/visual
+	  $(B)/unit $(B)/unit-fast $(B)/.protocol-* $(B)/coverage* $(B)/v11b $(B)/mutate* $(B)/shots $(B)/visual
