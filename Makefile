@@ -142,13 +142,13 @@ HOST_CC   := gcc
 HOST_FLAGS = -std=gnu17 -O0 -g $(WARN) -Wno-missing-prototypes -Isrc -I$(UNITY)
 
 # build-unit,PROTO,TEST,DIR,EXTRA: compile one test binary. Sources go through realpath, so B and
-# DEPS may be relative or absolute (chunk2 review F1: '$(CURDIR)/' broke absolute DEPS). Exit 2 if
-# anything fails to compile.
+# DEPS may be relative or absolute (chunk2 review F1: '$(CURDIR)/' broke absolute DEPS). Exit 200 if
+# anything fails to compile: a value no test binary returns (Unity exits with its failure COUNT).
 define build-unit
 d=$(3); mkdir -p $$d; objs=; \
 for f in $(2) $(CORE_SRC) $(UNITY)/unity.c; do o=$$d/$$(basename $$f .c).o; \
-  $(HOST_CC) $(HOST_FLAGS) $(4) -DPROTOCOL_$(1) -c $$(realpath $$f) -o $$o || exit 2; objs="$$objs $$o"; done; \
-$(HOST_CC) $(4) -o $$d/$$(basename $(2) .c) $$objs || exit 2
+  $(HOST_CC) $(HOST_FLAGS) $(4) -DPROTOCOL_$(1) -c $$(realpath $$f) -o $$o || exit 200; objs="$$objs $$o"; done; \
+$(HOST_CC) $(4) -o $$d/$$(basename $(2) .c) $$objs || exit 200
 endef
 
 # Every test binary is built for both protocols (constants differ: split, limits, XY default).
@@ -162,16 +162,21 @@ unit: $(DEPS)/.stamp
 	done; done
 
 # For mutation testing: only the unit tests in UNIT_TESTS, no coverage, 10 s timeout per binary.
-# The outcome goes in $(B)/unit-fast/result: 0 = pass, 2 = didn't compile, 1 = a test failed,
-# 124 = timed out. (make itself exits 2 for ANY failing recipe, so its exit code can't tell a
-# failing test from a compile error; that misclassified every unit kill as INVALID.)
+# The outcome goes in $(B)/unit-fast/result: 0 = pass, 1 = a test failed, 124 = timed out,
+# 200 = didn't compile, 3 = infrastructure problem (timeout's own 125-127). A crash (128+signal, e.g.
+# a mutant that segfaults) is a test failure = 1. Two traps handled here: make exits 2 for ANY
+# failing recipe (so its own exit code is useless), and a Unity binary exits with its number of
+# FAILED tests, so "2 tests failed" used to look like the old compile-error code 2 (re-check F1).
 UNIT_TESTS ?= $(UNIT_SRC)
 unit-fast: $(DEPS)/.stamp
 	@mkdir -p $(B)/unit-fast; \
 	( for proto in V11A V11B; do for t in $(UNIT_TESTS); do \
 	    n=$$(basename $$t .c); \
 	    $(call build-unit,$$proto,$$t,$(abspath $(B))/unit-fast/$$proto/$$n,); \
-	    timeout 10 $$d/$$n > $$d/out.txt || exit $$?; \
+	    timeout 10 $$d/$$n > $$d/out.txt; rc=$$?; \
+	    if [ $$rc -eq 124 ]; then exit 124; \
+	    elif [ $$rc -ge 125 ] && [ $$rc -le 127 ]; then exit 3; \
+	    elif [ $$rc -ne 0 ]; then exit 1; fi; \
 	  done; done ); echo $$? > $(B)/unit-fast/result
 
 # Coverage gated per protocol: pooling V11A + V11B could hide a branch only one reaches (chunk2 F6).

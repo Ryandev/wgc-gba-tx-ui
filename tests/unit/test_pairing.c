@@ -22,6 +22,10 @@ static void test_init_clamps_into_range(void)
     TEST_ASSERT_EQUAL_UINT8(PROTO_MAX_ADDR, p.val[PAIR_ADDRESS]);
     TEST_ASSERT_EQUAL_UINT8(4, p.val[PAIR_PACKETS]);
     TEST_ASSERT_EQUAL_INT(PAIR_CHANNEL, p.row);
+    TEST_ASSERT_EQUAL_INT(0, p.held); // fresh state, no running repeat (re-check F4)
+    TEST_ASSERT_EQUAL_UINT16(0, p.dir);
+    pairing_step(&p, 0, 0); // idle frames keep it fresh
+    TEST_ASSERT_EQUAL_INT(0, p.held);
 }
 
 static void test_ranges_match_stock_or_v11b_limits(void)

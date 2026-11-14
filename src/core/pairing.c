@@ -23,8 +23,8 @@ void pairing_init(pairing_state *p, uint8_t channel, uint8_t address, uint8_t pa
     p->val[PAIR_ADDRESS] = clamp(PAIR_ADDRESS, address);
     p->val[PAIR_PACKETS] = clamp(PAIR_PACKETS, packets);
     p->row = PAIR_CHANNEL;
-    p->held = 0; // mutate: equivalent[0 -> 1] (reset by the first direction change)
-    p->dir = 0;  // mutate: equivalent[0 -> 1] (bit 0 is A, never a Left/Right mask)
+    p->held = 0;
+    p->dir = 0;
 }
 
 pairing_action pairing_step(pairing_state *p, uint16_t hit, uint16_t down)

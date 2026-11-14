@@ -110,4 +110,12 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    # Exit codes: 0 = pass, 1 = a capture differs or is missing, 3 = infrastructure error
+    try:
+        main()
+    except SystemExit:
+        raise
+    except Exception:  # noqa: BLE001 - harness crash, unreadable golden, ...: not a test result
+        import traceback
+        traceback.print_exc()
+        sys.exit(3)

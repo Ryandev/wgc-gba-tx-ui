@@ -37,7 +37,7 @@ void link_start(void)
 {
     // 16.78 MHz / 64 = 262144 Hz; 524 ticks = 1.999 ms
     REG_TM3CNT = 0;                  // mutate: equivalent[0 -> 1] (timer stays stopped; fully set below)
-    REG_TM3D = (u16)(0x10000 - 524); // mutate: equivalent[hex const +1, dec const +1] (+-1 tick = 4 us)
+    REG_TM3D = (u16)(0x10000 - 524); // period pinned by tests/run_tests.py (SEND_PERIOD_CYCLES)
     // Priority 0 = first in libtonc's ISR table: the send always runs before any other handler
     // (the master ISR scans in order with IME off). SPEC.md §0 rule 7.
     irq_set(II_TIMER3, link_tick, ISR_PRIO(0));

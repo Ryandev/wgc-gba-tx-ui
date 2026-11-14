@@ -16,6 +16,7 @@ import os, subprocess, sys, tempfile
 from scenarios import SCENARIOS, PROTOCOLS, CPU_HZ, MAX_GAP_MS, MAX_PAIR_MS, MIN_PAIR_MS, pack, read_log
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+SEND_PERIOD_CYCLES = 524 * 64  # timer 3 at 16.78 MHz / 64, reload 0x10000 - 524 (src/link.c)
 
 
 def fmt(seq):
@@ -92,10 +93,9 @@ def main():
         s_w, s_k, s_e = read_log(os.path.join(base, name + '.log'))
         with tempfile.TemporaryDirectory() as d:
             r = subprocess.run([harness, rom, d] + sc['ours'], capture_output=True, text=True)
-            if r.returncode:
-                print(f'FAIL  {name:14} harness error: {r.stderr.strip() or r.returncode}')
-                fails += 1
-                continue
+            if r.returncode:  # the harness itself failed: an infrastructure error, not a test result
+                print(f'ERROR {name:14} harness error: {r.stderr.strip() or r.returncode}')
+                sys.exit(3)
             o_w, o_k, o_e = read_log(os.path.join(d, 'cart_writes.log'))
         s, o = analyse(s_w, proto, s_e), analyse(o_w, proto, o_e)
         probs = list(o['errs'])
@@ -113,6 +113,11 @@ def main():
         gap, lat, rate = timing(o['pairs'], o_k, proto)
         sgap, slat, _ = timing(s['pairs'], s_k, proto)
         if gap > MAX_GAP_MS: probs.append(f'gap {gap:.2f} ms > {MAX_GAP_MS} ms')
+        if len(o['pairs']) > 2:  # the send period is a design value: 524 ticks of 64 cycles (re-check F4)
+            gaps = sorted(b[1] - a[1] for a, b in zip(o['pairs'], o['pairs'][1:]))
+            median = gaps[len(gaps) // 2]
+            if abs(median - SEND_PERIOD_CYCLES) > SEND_PERIOD_CYCLES * 0.0005:
+                probs.append(f'send period {median} cycles != {SEND_PERIOD_CYCLES} (+-0.05%)')
         if lat > MAX_GAP_MS: probs.append(f'press-to-send {lat:.2f} ms > {MAX_GAP_MS} ms')
         probs += [f'rate: {r}' for r in rate[:3]]
         fails += bool(probs)
@@ -125,4 +130,12 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    # Exit codes: 0 = pass, 1 = a scenario failed, 3 = infrastructure error (never a test result)
+    try:
+        main()
+    except SystemExit:
+        raise
+    except Exception:  # noqa: BLE001 - anything unexpected is infrastructure, not a kill
+        import traceback
+        traceback.print_exc()
+        sys.exit(3)

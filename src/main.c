@@ -40,7 +40,9 @@ static void at(int row, const char *s)
     memcpy(buf, s, (size_t)n);
     memset(buf + n, ' ', (size_t)(TEXT_COLS - n));
     buf[TEXT_COLS] = 0;
-    tte_set_pos(0, row * 8); // mutate: equivalent[0 -> 1] (screen-entry text is tile-aligned)
+    // mutate: accepted[0 -> 1] x=1 makes the 30th char wrap to the next row; no Phase 0 line uses
+    // column 29, and this text system is replaced in Phase 1 (re-check F2: NOT equivalent).
+    tte_set_pos(0, row * 8); // mutate: accepted[0 -> 1] (see above)
     tte_write(buf);
 }
 
