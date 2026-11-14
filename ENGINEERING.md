@@ -108,12 +108,15 @@ To make host unit tests possible, the code is split into **pure modules** (no re
 
 ## 4. Mutation testing (Stryker equivalent)
 
-**Status 2026-11-14:** `tests/mutate.py` (our own, no third-party code) is built: `make mutate` and a CI
-job. First run: 39/56 killed (70%). Survivors showed **Left was never pressed in any emulator
-scenario** (fixed: `08_each_button`), and X/Y and address bit 7 were only unit-reachable. Now
-**51/51 valid mutants killed (100%)**, 3 annotated equivalent. Mull (host, LLVM IR) still needs the
-owner to install it (`/tmp/gba-mull.sh`, checksum-verified), because running downloaded binaries needs approval.
-
+**Status 2026-11-14:** `tests/mutate.py` (our own, no third-party code) is built: `make mutate` and a
+CI job (main / manual, ~45-60 min). History, kept honest:
+- First run 39/56 (70%): survivors showed **Left was never pressed in any emulator scenario**.
+- A later "155/155 (100%)" was **wrong**. Gemini's chunk-2 review found that every `src/core` mutant
+  failed to *compile* its unit tests (absolute-path bug) and was counted as killed, and that stale
+  object files were reused between mutants. Both are fixed: host compile failure = INVALID, fresh
+  objects per mutant, timeouts, annotations scoped to named operators.
+- Current numbers: see the latest `make mutate` run (recorded in the commit that follows it).
+Mull (host, LLVM IR) still needs the owner to install it (`/tmp/gba-mull.sh`, checksum-verified).
 
 Options for C:
 - **Mull** (LLVM-based, actively maintained): mutates at IR level, needs Clang. Fits the **host
