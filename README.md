@@ -17,8 +17,10 @@ breaking the wireless link.
 make                 # ROM for v1.1a carts -> build/wgc-gba-tx-ui.gba   (PROTOCOL=V11B for 2023+ carts)
 make test            # headless mGBA: compare cart writes with the stock ROM recordings
 make run             # open in mgba-qt
+make unit            # host unit tests of src/core, both protocols
+make coverage        # unit + gcovr gate (lines >= 95%, branches >= 90%), report in build/coverage.html
 make lint            # gcc -fanalyzer + clang-tidy + cppcheck
-make check           # format-check + lint + v1.1a/v1.1b protocol & timing tests (CI + pre-push hook)
+make check           # format-check + lint + coverage + v1.1a/v1.1b protocol & timing tests (CI + pre-push hook)
 make hooks           # once per clone: pushes run `make check` first
 ```
 Needs Ubuntu packages `gcc-arm-none-eabi binutils-arm-none-eabi libnewlib-arm-none-eabi build-essential git`
@@ -34,7 +36,9 @@ GitHub at pinned commits by `scripts/fetch_deps.sh`.
 | `reference/` | Vendor manual PDF, stock ROMs v1.1a/v1.1b (with SHA-256), board photos and rumble-mod schematic |
 | `SPEC.md` | **What we're building**: features A–R, ground rules, phases 0–4, ruled-out ideas |
 | `FEATURES.md` | Every stock screen (emulator screenshots), the verified byte log, and a feature menu for the new UI |
-| `src/` | ROM source: `link_write.s` (bus-faithful cart write), `link.c` (protocol, 2 ms timer IRQ), `main.c` |
+| `src/` | ROM hardware layer: `link_write.s` (bus-faithful cart write), `link.c` (2 ms timer IRQ), `main.c` (boot, screens) |
+| `src/core/` | Pure logic, no hardware (host-tested): key packing and protocol bytes, boot holds, pairing menu, text |
+| `tests/unit/` | Unity unit tests of `src/core`, run for both protocols (`make unit`, `make coverage`) |
 | `tests/run_tests.py` | Regression test against the stock ROM's recorded cart writes |
 | `tools/disasm_thumb.py` | Small Capstone disassembler used for the reverse engineering |
 | `tools/emu_harness.c` | Headless mGBA runner: boot with keys held, script presses, dump frames and log cart writes. Build notes are at the top of the file. |

@@ -94,7 +94,7 @@ fixed-width types for storage; no implicit narrowing conversions; no recursion; 
 
 | Level | What | How | Runs in |
 |---|---|---|---|
-| **Unit (host)** | Pure logic: `link_pack`, protocol encoding, menu state machines, note timers, LED status rules, settings encoding (and the "no byte = 0x49" rule) | Compile the same `.c` for x86 with a register shim; **Unity** test framework (MIT, single C file) or plain asserts; gcov/gcovr coverage | seconds |
+| **Unit (host)** *(built 2026-11-14: 31 tests × 2 protocols, 100% lines / 97.7% branches of src/core)* | Pure logic: `link_pack`, protocol encoding, menu state machines, note timers, LED status rules, settings encoding (and the "no byte = 0x49" rule) | Compile the same `.c` for x86 with a register shim; **Unity** test framework (MIT, single C file) or plain asserts; gcov/gcovr coverage | seconds |
 | **Protocol (emulator)** *(exists)* | Byte stream vs stock recordings | `make test`: headless mGBA, 6 scenarios | seconds |
 | **Timing (emulator)** *(adopted)* | Gap ≤ 2.2 ms, press-to-send ≤ 2.2 ms during UI-heavy scenarios | Harness logs CPU-cycle timestamps per write | seconds |
 | **Visual (emulator)** | Screens match approved goldens | §5 below | seconds |

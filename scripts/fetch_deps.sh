@@ -22,3 +22,5 @@ fetch libtonc         https://github.com/gbadev-org/libtonc.git     c5af1b2cb019
 fetch devkitarm-crtls https://github.com/devkitPro/devkitarm-crtls.git 1c0c10257c44bbb5a433453bb6bba91582825492
 # gba-tools (GPL-3.0, build tool only, not linked into the ROM) - gbafix header fixer
 fetch gba-tools       https://github.com/devkitPro/gba-tools.git    054d507f90d32784274b6cf7e03f1c43d02d7a57
+# Unity (MIT)                        - C unit-test framework for host tests (tests/unit), v2.6.1
+fetch unity           https://github.com/ThrowTheSwitch/Unity.git   cbcd08fa7de711053a3deec6339ee89cad5d2697

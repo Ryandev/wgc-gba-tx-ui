@@ -5,6 +5,8 @@
 #   make PROTOCOL=V11B    ROM for v1.1b (2023+) carts
 #   make test             run the ROM headless in mGBA and compare cart writes with the stock ROM
 #   make run              open the ROM in mgba-qt
+#   make unit             host unit tests of src/core (Unity), both protocols
+#   make coverage         unit + gcovr line/branch coverage gate (build/coverage.html)
 #   make lint             gcc -fanalyzer + clang-tidy + cppcheck
 #   make check            format-check + lint + test-all (what CI and the pre-push hook run)
 #   make hooks            enable the repo's git hooks (.githooks/pre-push)
@@ -34,11 +36,11 @@ GCCLIB   := $(dir $(shell $(CC) -mcpu=arm7tdmi -mthumb -print-libgcc-file-name))
 LDFLAGS  := $(ARCH) -mthumb -nostartfiles -T ld/gba_cart.ld -Wl,--gc-sections \
             -Wl,--no-warn-rwx-segments -Wl,-Map,$(B)/$(NAME).map
 
-SRC_C    := $(wildcard src/*.c)
+SRC_C    := $(wildcard src/*.c src/core/*.c)
 SRC_S    := $(wildcard src/*.s)
 OBJS     := $(SRC_C:src/%.c=$(B)/obj/%.o) $(SRC_S:src/%.s=$(B)/obj/%.o)
 
-.PHONY: all deps test test-v11b test-all baselines lint format format-check check hooks run clean
+.PHONY: all deps test test-v11b test-all baselines unit coverage lint format format-check check hooks run clean
 all: $(B)/$(NAME).gba
 
 # ---- third-party: fetched at pinned commits, built here ------------------------------------
@@ -108,11 +110,38 @@ baselines: $(B)/emu_harness
 	python3 tests/record_baselines.py $(B)/emu_harness reference/stock-rom/GBA_TX_Cart_ROM_v1.1a.gba \
 	  reference/stock-rom/GBA_TX_Cart_ROM_v1.1b.gba
 
+# ---- host unit tests (ENGINEERING.md §3): src/core is pure C, built for the PC -------------
+UNITY     := $(DEPS)/unity/src
+CORE_SRC  := $(wildcard src/core/*.c)
+UNIT_SRC  := $(wildcard tests/unit/test_*.c)
+HOST_CC   := gcc
+HOST_FLAGS = -std=gnu17 -O0 -g $(WARN) -Wno-missing-prototypes -Isrc -I$(UNITY) --coverage
+
+# Every test binary is built for both protocols (constants differ: split, limits, XY default).
+unit: $(DEPS)/.stamp
+	@rm -rf $(B)/unit && mkdir -p $(B)/unit
+	@set -e; for proto in V11A V11B; do for t in $(UNIT_SRC); do \
+	  n=$$(basename $$t .c); d=$(CURDIR)/$(B)/unit/$$proto/$$n; mkdir -p $$d; objs=; \
+	  for f in $$t $(CORE_SRC) $(UNITY)/unity.c; do o=$$d/$$(basename $$f .c).o; \
+	    $(HOST_CC) $(HOST_FLAGS) -DPROTOCOL_$$proto -c $(CURDIR)/$$f -o $$o; objs="$$objs $$o"; done; \
+	  $(HOST_CC) --coverage -o $$d/$$n $$objs; \
+	  (cd $$d && ./$$n) > $$d/out.txt || { cat $$d/out.txt; echo "unit: $$proto $$n FAILED"; exit 1; }; \
+	  echo "unit: $$proto  $$(grep -E '^[0-9]+ Tests' $$d/out.txt)  $$n"; \
+	done; done
+
+# Coverage of src/core across all unit runs; fails under the thresholds.
+COV_LINE   ?= 95
+COV_BRANCH ?= 90
+coverage: unit
+	@gcovr -r . --object-directory $(B)/unit --filter 'src/core/' --exclude-unreachable-branches \
+	  --print-summary --fail-under-line $(COV_LINE) --fail-under-branch $(COV_BRANCH) \
+	  --html-details $(B)/coverage.html -s | tail -3
+
 # ---- static analysis / style (ENGINEERING.md §2) ------------------------------------------
 LINT_SRC  := $(SRC_C)
 LINT_DEFS := -DPROTOCOL_$(PROTOCOL)
 TIDY_ARGS := --target=armv4t-none-eabi -mthumb -std=gnu17 -isystem $(TONC)/include -isystem /usr/include/newlib $(LINT_DEFS)
-FMT_SRC   := $(wildcard src/*.c src/*.h) tools/emu_harness.c
+FMT_SRC   := $(wildcard src/*.c src/*.h src/core/*.c src/core/*.h tests/unit/*.c) tools/emu_harness.c
 
 lint: $(DEPS)/.stamp
 	@echo "lint: gcc -fanalyzer"
@@ -136,7 +165,7 @@ format-check:
 	@clang-format --dry-run --Werror $(FMT_SRC) && echo "format: OK"
 
 # Everything CI and the pre-push hook run
-check: format-check lint test-all
+check: format-check lint coverage test-all
 
 # Use the repo's git hooks (pre-push runs `make check`)
 hooks:

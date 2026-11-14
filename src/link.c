@@ -1,6 +1,7 @@
 #include <tonc.h>
 #include "link.h"
 #include "protocol.h"
+#include "core/keyword.h"
 
 volatile u16 link_last_word;
 volatile u32 link_packets;
@@ -8,47 +9,27 @@ bool link_xy = PROTO_XY_DEFAULT;
 static volatile bool s_paused;
 
 void link_sync(void) { link_write(PROTO_SYNC); }
+
 void link_gb_mode(void)
 {
     link_write(PROTO_GB1);
     link_write(PROTO_GB2);
 }
 
-void link_send_config(u8 ch, u8 addr, u8 packets)
+void link_pair(u8 channel, u8 address, u8 packets)
 {
-    link_write(PROTO_CFG1);
-    link_write(PROTO_CFG2);
-    link_write(ch);
-    link_write(addr);
-    link_write(((addr >> 1) & 0x40) | packets); // address bit 7 travels in bit 6 (stock behaviour)
-}
-
-u16 link_pack(u16 k, bool xy)
-{
-    u16 w = 0;
-    if (k & KEY_A) w |= W_A;
-    if (k & KEY_B) w |= W_B;
-    if (k & KEY_RIGHT) w |= W_RIGHT;
-    if (k & KEY_LEFT) w |= W_LEFT;
-    if (k & KEY_UP) w |= W_UP;
-    if (k & KEY_DOWN) w |= W_DOWN;
-    if (k & KEY_SELECT) w |= W_SELECT;
-    if (k & KEY_START) w |= W_START;
-    if (k & KEY_L) w |= W_L;
-    if (k & KEY_R) w |= W_R;
-    if (xy && (k & (KEY_L | KEY_R)) == (KEY_L | KEY_R)) {
-        if (k & KEY_A) w |= W_X;
-        if (k & KEY_B) w |= W_Y;
-    }
-    return w;
+    u16 msg[5];
+    kw_config_bytes(channel, address, packets, msg);
+    link_sync(); // boot-time Settings hasn't sent sync yet; the ATtiny needs it first (stock order)
+    for (int i = 0; i < 5; i++) link_write(msg[i]);
 }
 
 // Timer-3 IRQ, about every 2 ms: read the pad, send one key word as two writes.
 static void link_tick(void)
 {
-    u16 w = s_paused ? 0 : link_pack(~REG_KEYINPUT & KEY_MASK, link_xy);
-    link_write(w >> PROTO_SHIFT);
-    link_write(w & PROTO_LO_MASK);
+    u16 w = s_paused ? 0 : kw_pack((u16)(~REG_KEYINPUT & K_ALL), link_xy);
+    link_write(kw_hi(w));
+    link_write(kw_lo(w));
     link_last_word = w;
     link_packets++;
 }

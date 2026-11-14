@@ -1,12 +1,16 @@
-// wgc-gba-tx-ui, Phase 0: stock-equivalent behaviour with a minimal text screen.
-// Goal of this phase: the cart sees exactly the same byte stream as with the stock ROM
-// (checked by `make test` against reference/cart-write-logs-v1.1a). The real UI comes in Phase 1.
+// wgc-gba-tx-ui: hardware layer for boot, screens and the pairing menu.
+// Logic lives in core/ (host-tested); this file reads keys, draws, and calls the link layer.
+// Phase 0 screen: minimal text. The real UI comes in Phase 1.
 #include <string.h>
 #include <tonc.h>
 #include "link.h"
 #include "protocol.h"
+#include "core/boot.h"
+#include "core/keyword.h"
+#include "core/pairing.h"
+#include "core/text.h"
 
-#define VERSION "0.0.1"
+#define VERSION "0.1.0"
 
 static void text_init(void)
 {
@@ -29,60 +33,33 @@ static void at(int col, int row, const char *s)
     tte_write(buf);
 }
 
-static void hex3(char *out, u16 v)
-{
-    const char *h = "0123456789ABCDEF";
-    out[0] = h[(v >> 8) & 15];
-    out[1] = h[(v >> 4) & 15];
-    out[2] = h[v & 15];
-    out[3] = 0;
-}
+static u16 pressed_now(void) { return (u16)(~REG_KEYINPUT & K_ALL); }
 
-// ---- pairing menu (Start held at boot), stock-equivalent bytes ------------------------------
+// Boot-time Settings (Start held): pairing only, for now. Nothing has been sent to the cart yet;
+// link_pair() sends sync + the pairing message (SPEC.md §S boot order).
 static void pairing_menu(void)
 {
-    u8 val[3] = {1, 1, 1}; // TODO Phase 1: build-time defaults (SPEC F)
-    const u8 lo[3] = {1, 1, 1};
-    const u8 hi[3] = {PROTO_MAX_CH, PROTO_MAX_ADDR, 4};
-    const char *name[3] = {"RF CHANNEL", "RF ADDRESS", "PCKS/REFRESH"};
-    int row = 0;
-    int rep = 0;
+    static const char *const name[PAIR_ROWS] = {"RF CHANNEL", "RF ADDRESS", "PCKS/REFRESH"};
+    pairing_state p;
+    pairing_init(&p, 1, 1, 1); // TODO Phase 1: build-time defaults (SPEC F)
+    u16 prev = pressed_now();
     at(0, 3, "--- PAIRING ---");
     at(0, 9, "A: SEND  (THEN POWER CYCLE)");
     for (;;) {
         VBlankIntrWait();
-        key_poll();
-        for (int i = 0; i < 3; i++) {
-            char line[32] = "  ";
-            int n = 2;
-            for (const char *p = name[i]; *p;) line[n++] = *p++;
-            line[n++] = ':';
-            line[n++] = ' ';
-            u8 v = val[i];
-            if (v >= 100) line[n++] = '0' + v / 100;
-            if (v >= 10) line[n++] = '0' + (v / 10) % 10;
-            line[n++] = '0' + v % 10;
-            line[n] = 0;
-            if (i == row) line[0] = '>';
+        u16 down = pressed_now();
+        u16 hit = (u16)(down & ~prev);
+        prev = down;
+        for (int i = 0; i < PAIR_ROWS; i++) {
+            char line[32];
+            fmt_menu_row(line, sizeof line, name[i], p.val[i], i == p.row);
             at(0, 5 + i, line);
         }
-        if (key_hit(KEY_UP) && row > 0) row--;
-        if (key_hit(KEY_DOWN) && row < 2) row++;
-        int d = 0;
-        if (key_hit(KEY_RIGHT)) d = 1;
-        if (key_hit(KEY_LEFT)) d = -1;
-        if (key_is_down(KEY_LEFT | KEY_RIGHT)) {
-            rep++;
-            if (rep > 20 && (rep & 3) == 0) d = key_is_down(KEY_RIGHT) ? 1 : -1; // controlled repeat
-        } else
-            rep = 0;
-        if (d > 0 && val[row] < hi[row]) val[row]++;
-        if (d < 0 && val[row] > lo[row]) val[row]--;
-        if (key_hit(KEY_A)) {
-            link_send_config(val[0], val[1], val[2]);
+        if (pairing_step(&p, hit, down) == PAIR_SEND) {
+            link_pair(p.val[PAIR_CHANNEL], p.val[PAIR_ADDRESS], p.val[PAIR_PACKETS]);
             at(0, 11, "PAIRING SENT. NOT SENDING");
             at(0, 12, "BUTTONS. POWER CYCLE TO PLAY");
-            for (;;) VBlankIntrWait(); // ATtiny sends the config until power-off
+            for (;;) VBlankIntrWait(); // the ATtiny repeats the config until power-off
         }
     }
 }
@@ -92,35 +69,36 @@ int main(void)
     irq_init(NULL);
     irq_add(II_VBLANK, NULL);
 
-    link_sync(); // stock order: sync is the very first write
-    u16 held = ~REG_KEYINPUT & KEY_MASK;
+    // Read the boot holds BEFORE anything goes on the bus (SPEC.md §S boot order).
+    boot_plan plan = boot_decide(pressed_now());
 
-    if ((held & (KEY_SELECT | KEY_DOWN)) == (KEY_SELECT | KEY_DOWN)) {
+    if (plan.screen == SCREEN_BLACK) {
         REG_DISPCNT = DCNT_MODE0; // black screen (backlit mods)
         pal_bg_mem[0] = 0;
-    } else if (held & KEY_SELECT) {
+    } else if (plan.screen == SCREEN_OFF) {
         REG_DISPCNT = DCNT_MODE0; // screen "off": plain backdrop, nothing drawn
         pal_bg_mem[0] = RGB15(8, 8, 8);
     } else {
         text_init();
         at(0, 0, "WGC-GBA-TX-UI " VERSION);
-        at(0, 1, "PHASE 0  PROTOCOL " PROTO_NAME);
-        if (held & KEY_START) pairing_menu(); // never returns
+        at(0, 1, "PROTOCOL " PROTO_NAME);
+        if (plan.settings) pairing_menu(); // never returns
     }
 
-    if (held & KEY_A) { // GB mode: no L/R
+    link_sync();
+    if (plan.gb_mode) { // GB mode: no L/R
         link_gb_mode();
-        if (REG_DISPCNT & DCNT_BG0) at(0, 2, "GB MODE");
+        if (plan.screen == SCREEN_NORMAL) at(0, 2, "GB MODE");
     }
 
     link_start();
     u32 last = 0;
-    char buf[] = "KEYS 000"; // fully initialised; hex3() overwrites the 3 digits
+    char buf[] = "KEYS 000"; // fully initialised; fmt_hex3() overwrites the 3 digits
     for (;;) {
         VBlankIntrWait();
-        if ((REG_DISPCNT & DCNT_BG0) && link_packets != last) {
+        if (plan.screen == SCREEN_NORMAL && link_packets != last) {
             last = link_packets;
-            hex3(buf + 5, link_last_word);
+            fmt_hex3(buf + 5, link_last_word);
             at(0, 4, buf);
         }
     }
