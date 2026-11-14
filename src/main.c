@@ -73,8 +73,11 @@ int main(void)
     boot_plan plan = boot_decide(pressed_now());
 
     if (plan.screen == SCREEN_BLACK) {
-        REG_DISPCNT = DCNT_MODE0; // black screen (backlit mods)
-        pal_bg_mem[0] = 0;
+        // Black screen (backlit mods), done the stock way: BG0 on, whole palette black.
+        // A layers-off frame with backdrop 0x0000 renders white in mGBA 0.10 (found by the golden
+        // tests); BG0 + black palette is black in both, and matches the stock ROM.
+        text_init();
+        memset16(pal_bg_mem, 0, 256);
     } else if (plan.screen == SCREEN_OFF) {
         REG_DISPCNT = DCNT_MODE0; // screen "off": plain backdrop, nothing drawn
         pal_bg_mem[0] = RGB15(8, 8, 8);

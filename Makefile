@@ -4,6 +4,7 @@
 #   make                  ROM for the v1.1a cart protocol  -> build/wgc-gba-tx-ui.gba
 #   make PROTOCOL=V11B    ROM for v1.1b (2023+) carts
 #   make test             run the ROM headless in mGBA and compare cart writes with the stock ROM
+#   make visual           golden-image (screenshot) tests, pixel-exact, both protocols
 #   make run              open the ROM in mgba-qt
 #   make unit             host unit tests of src/core (Unity), both protocols
 #   make coverage         unit + gcovr line/branch coverage gate (build/coverage.html)
@@ -41,7 +42,7 @@ SRC_C    := $(wildcard src/*.c src/core/*.c)
 SRC_S    := $(wildcard src/*.s)
 OBJS     := $(SRC_C:src/%.c=$(B)/obj/%.o) $(SRC_S:src/%.s=$(B)/obj/%.o)
 
-.PHONY: all deps test test-v11b test-all baselines unit coverage mutate lint lint-one format format-check check hooks run clean
+.PHONY: all deps test test-v11b test-all visual visual-approve baselines unit coverage mutate lint lint-one format format-check check hooks run clean
 all: $(B)/$(NAME).gba
 
 # ---- third-party: fetched at pinned commits, built here ------------------------------------
@@ -108,6 +109,17 @@ test-v11b: $(B)/emu_harness
 	python3 tests/run_tests.py $(B)/emu_harness $(B)/v11b/$(NAME).gba v1.1b
 
 test-all: test test-v11b
+
+# Golden-image tests (pixel-exact, tests/visual/golden/<ver>/). visual-approve only after looking.
+visual: $(B)/$(NAME).gba $(B)/emu_harness
+	@$(MAKE) --no-print-directory B=$(B)/v11b DEPS=$(DEPS) PROTOCOL=V11B $(B)/v11b/$(NAME).gba >/dev/null
+	python3 tests/visual.py $(B)/emu_harness $(B)/$(NAME).gba v1.1a
+	python3 tests/visual.py $(B)/emu_harness $(B)/v11b/$(NAME).gba v1.1b
+
+visual-approve: $(B)/$(NAME).gba $(B)/emu_harness
+	@$(MAKE) --no-print-directory B=$(B)/v11b DEPS=$(DEPS) PROTOCOL=V11B $(B)/v11b/$(NAME).gba >/dev/null
+	python3 tests/visual.py $(B)/emu_harness $(B)/$(NAME).gba v1.1a --approve
+	python3 tests/visual.py $(B)/emu_harness $(B)/v11b/$(NAME).gba v1.1b --approve
 
 # Re-record tests/baselines/ from the stock ROMs (local only: reference/ is not in the repo)
 baselines: $(B)/emu_harness
@@ -184,7 +196,7 @@ format-check:
 	@clang-format --dry-run --Werror $(FMT_SRC) && echo "format: OK"
 
 # Everything CI and the pre-push hook run
-check: format-check lint coverage test-all
+check: format-check lint coverage test-all visual
 
 # Use the repo's git hooks (pre-push runs `make check`)
 hooks:
@@ -195,4 +207,4 @@ run: $(B)/$(NAME).gba
 
 clean:
 	rm -rf $(B)/obj $(B)/tonc $(B)/*.o $(B)/*.a $(B)/*.elf $(B)/*.gba $(B)/*.map $(B)/gbafix $(B)/emu_harness \
-	  $(B)/unit $(B)/coverage* $(B)/v11b $(B)/mutate* $(B)/shots
+	  $(B)/unit $(B)/coverage* $(B)/v11b $(B)/mutate* $(B)/shots $(B)/visual

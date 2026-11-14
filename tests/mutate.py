@@ -5,7 +5,7 @@
 
 For each mutant: copy the repo's src/ to a temp tree, apply one mutation, build the ROM with the
 real toolchain (make B=<tmp>), and run the protocol + timing suite (tests/run_tests.py) for
-v1.1a, plus (for src/core files) the host unit tests for both protocols. A mutant is KILLED if any
+v1.1a, the golden-image tests (v1.1a), plus (for src/core files) the host unit tests for both protocols. A mutant is KILLED if any
 test fails, INVALID if it doesn't compile (not counted), SURVIVED otherwise.
 Survivors are printed with file:line so each can be checked (killed by a new test, or annotated
 as equivalent with `// mutate: equivalent <reason>` on that line, which skips it).
@@ -81,7 +81,10 @@ def run_one(mt, tmp):
         if subprocess.run(mk + ['unit'], capture_output=True, text=True).returncode: return 'KILLED (unit)'
     r = subprocess.run([sys.executable, os.path.join(ROOT, 'tests/run_tests.py'), os.path.join(ROOT, 'build/emu_harness'),
                         f'{b}/wgc-gba-tx-ui.gba', 'v1.1a'], capture_output=True, text=True)
-    return 'KILLED (emulator)' if r.returncode else 'SURVIVED'
+    if r.returncode: return 'KILLED (emulator)'
+    r = subprocess.run([sys.executable, os.path.join(ROOT, 'tests/visual.py'), os.path.join(ROOT, 'build/emu_harness'),
+                        f'{b}/wgc-gba-tx-ui.gba', 'v1.1a'], capture_output=True, text=True)
+    return 'KILLED (visual)' if r.returncode else 'SURVIVED'
 
 
 def main():

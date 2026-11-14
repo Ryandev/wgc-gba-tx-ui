@@ -31,7 +31,7 @@ static void link_tick(void)
     link_write(kw_hi(w));
     link_write(kw_lo(w));
     link_last_word = w;
-    link_packets++; // mutate: equivalent for the bus; UI-only counter (killed by golden screenshots, chunk 3)
+    link_packets++; // mutate: equivalent for ++ -> -- (UI only checks the counter changed)
 }
 
 void link_start(void)

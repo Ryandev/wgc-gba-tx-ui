@@ -19,8 +19,10 @@ make test            # headless mGBA: compare cart writes with the stock ROM rec
 make run             # open in mgba-qt
 make unit            # host unit tests of src/core, both protocols
 make coverage        # unit + gcovr gate (lines >= 95%, branches >= 90%), report in build/coverage.html
+make visual          # golden-image tests (pixel-exact); make visual-approve after looking at changes
+make mutate          # mutation testing on the real ARM build (slow)
 make lint            # gcc -fanalyzer + clang-tidy + cppcheck
-make check           # format-check + lint + coverage + v1.1a/v1.1b protocol & timing tests (CI + pre-push hook)
+make check           # format-check + lint + coverage + protocol/timing + visual (CI + pre-push hook)
 make hooks           # once per clone: pushes run `make check` first
 ```
 Needs Ubuntu packages `gcc-arm-none-eabi binutils-arm-none-eabi libnewlib-arm-none-eabi build-essential git`

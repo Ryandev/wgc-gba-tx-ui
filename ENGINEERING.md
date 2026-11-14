@@ -137,6 +137,12 @@ Proposal:
 
 ## 5. Screenshot (golden image) tests
 
+**Status 2026-11-14: built.** `tests/visual.py` + `tests/pngio.py` (no image library needed), 8 screens ×
+2 protocols, `make visual` is part of `make check`, and mutation testing scores against it too. **First
+run found a real bug:** the Select+Down black screen rendered *white* (layers off with backdrop 0x0000
+in mGBA 0.10). Fixed the stock way (BG0 on, black palette).
+
+
 mGBA is deterministic, so the same ROM plus the same key script gives the **same pixels every
 run**. That allows exact comparison, no fuzzy thresholds:
 
