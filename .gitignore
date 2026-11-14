@@ -1,0 +1,19 @@
+# --- kept local, not published ---
+# reference/: insideGadgets ROMs, manual, photos, emulator screenshots of their UI (SPEC.md §2.5)
+reference/
+# mockups/: design mockups (rendered with a font lifted from the stock ROM)
+mockups/
+# Gemini (agy) review transcripts
+.reviews/
+
+# --- build outputs ---
+build/
+*.elf
+*.sav
+/*.gba
+
+# --- tooling ---
+__pycache__/
+*.pyc
+*.ppm
+.vscode/

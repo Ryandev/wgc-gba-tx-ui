@@ -1,0 +1,69 @@
+# wgc-gba-tx-ui
+
+Unofficial replacement on-screen UI for the insideGadgets Wireless Gameboy Controller GBA TX cart.
+Repo: https://github.com/Ryandev/wgc-gba-tx-ui
+
+## Controller: wireless GBA pad for the giant GBA
+
+This is a sub-project of the giant GBA (see `../Claude/build-brief.md`). It uses the insideGadgets
+**Wireless Gameboy Controller**: a **GBA TX cart** in a real GBA, plus a **USB receiver** that shows
+up on the Pi 4 / RetroArch as a USB HID joystick.
+
+**Goal:** replace the plain text-console UI on the cart with something more interesting, without
+breaking the wireless link.
+
+## Build
+```
+make                 # ROM for v1.1a carts -> build/wgc-gba-tx-ui.gba   (PROTOCOL=V11B for 2023+ carts)
+make test            # headless mGBA: compare cart writes with the stock ROM recordings
+make run             # open in mgba-qt
+```
+Needs Ubuntu packages `gcc-arm-none-eabi binutils-arm-none-eabi libnewlib-arm-none-eabi build-essential git`
+(+ `libmgba-dev` for tests, `mgba-qt` to play). libtonc, the GBA crt0 and gbafix are fetched from
+GitHub at pinned commits by `scripts/fetch_deps.sh`.
+
+## Layout
+| Path | What |
+|---|---|
+| `HARDWARE.md` | Everything known about the hardware, plus the reverse-engineered cart protocol. **Read before touching the ROM.** |
+| `FLASHING.md` | The three programs in the system, how each is updated, and the step-by-step cart reflash |
+| `reference/` | Vendor manual PDF, stock ROMs v1.1a/v1.1b (with SHA-256), board photos and rumble-mod schematic |
+| `SPEC.md` | **What we're building**: features A–R, ground rules, phases 0–4, ruled-out ideas |
+| `FEATURES.md` | Every stock screen (emulator screenshots), the verified byte log, and a feature menu for the new UI |
+| `src/` | ROM source: `link_write.s` (bus-faithful cart write), `link.c` (protocol, 2 ms timer IRQ), `main.c` |
+| `tests/run_tests.py` | Regression test against the stock ROM's recorded cart writes |
+| `tools/disasm_thumb.py` | Small Capstone disassembler used for the reverse engineering |
+| `tools/emu_harness.c` | Headless mGBA runner: boot with keys held, script presses, dump frames and log cart writes. Build notes are at the top of the file. |
+| `tools/gba_front_labels.py` | Turns the CAD front DXF (`../Designs/dimensions/GBA_Front.dxf`) into a GBA-resolution part map for the controller drawing |
+| `tools/ppm2png.py` | Converts harness frames to scaled PNGs (no dependencies) |
+
+## Where things stand (2026-11-14)
+- [x] Hardware identified: MX29LV320 flash, MAX V 5M40Z CPLD, ATtiny48/88, nRF24L01+; receiver is ATtiny841 + V-USB.
+- [x] Stock ROM protocol recovered for both versions (sync, GB mode, config, 12-bit key word, hidden L+R+A/B → X/Y in v1.1b).
+- [x] Find out which version is on my cart: **v1.1a** (pre-2022 hardware, 7-bit protocol, sync `0x49`).
+  - Decision: **don't flash stock v1.1b onto it.** The v1.1a ATtiny waits for sync `0x49` (`while (byteRead != 0x49)`,
+    blog Part 6). v1.1b sends `0x29`, so the cart would never sync, and its 6/6 key split would decode wrongly anyway.
+    The new ROM is written from scratch on the **v1.1a protocol**. Protocol constants sit behind a build flag so a
+    v1.1b cart works too. X/Y (L+R+A/B) gets ported in as an **experiment**: bits 10/11 fit in the 7-bit high half,
+    but nobody knows yet whether the v1.1a ATtiny forwards them.
+- [ ] Buy a GBxCart RW (I don't have a flasher; see `FLASHING.md`). Not needed until a ROM is ready. Then **dump the stock ROM** first.
+- [ ] Check the receiver on the Pi: `lsusb | grep -i 16c0:27dc`, `jstest /dev/input/js0`.
+- [ ] Toolchain: devkitPro's servers block this network (Cloudflare 403), so no devkitPro installer
+      and no Docker. Ubuntu `gcc-arm-none-eabi` + newlib, with libtonc (MIT), devkitPro's GBA crt0 and
+      linker script (MPL-2.0) and gbafix (GPL-3.0, build tool only) built from GitHub at pinned commits:
+      libtonc `c5af1b2`, devkitarm-crtls `1c0c102`, gba-tools `054d507`. Proven 2026-11-14: a test ROM
+      booted in mGBA and wrote the `0x49` sync byte. Glue needed: define `fake_heap_end`, link GCC's
+      `crti/crtbegin/crtend/crtn`, and skip libtonc's `tte_iohook.c`. Installer: `/tmp/gba.sh`.
+- [x] Toolchain installed (`/tmp/gba.sh` log: `/tmp/gba-install.log`).
+- [x] **Phase 0 done (2026-11-14):** `make && make test` builds `build/wgc-gba-tx-ui.gba` (12 KB vs
+      stock 78 KB). It reproduces the stock v1.1a cart byte stream in all 6 recorded scenarios
+      (sync, GB mode, pairing, screen off/black, all key combos), at about 2.0 ms per key word.
+      A v1.1b build correctly fails the v1.1a baselines. The cart write + delay is a bus-faithful
+      copy of the stock instruction sequence (`src/link_write.s`).
+- [ ] Phase 1: CAD-based controller view, LED status and LCD notes, splash, Settings basics.
+- [ ] New UI.
+
+## The current UI (stock)
+A libgba text console on a dark grey background: the "insideGadgets" title, a version line, and a
+`.` that appears whenever a key is down. Holding Start at boot gives a 3-line Options menu. Nothing
+else.
