@@ -163,12 +163,37 @@ class SvgToGba(unittest.TestCase):
         self.assertEqual(svg, read(os.path.join(ROOT, 'assets', 'controller.svg')),
                          'assets/controller.svg is stale: run python3 tools/gen_controller_svg.py')
 
+    def test_dpad_split_into_arms_and_centre(self):
+        # a plus sign: arms 5.75 wide, 17.25 tip to tip, centred on (0, 0)
+        a, s = gen_controller_svg.DPAD_ARM / 2, 17.25 / 2
+        cross = [(-a, s), (a, s), (a, a), (s, a), (s, -a), (a, -a), (a, -s), (-a, -s), (-a, -a), (-s, -a), (-s, a), (-a, a)]
+        parts = gen_controller_svg.dpad_parts(cross)
+
+        def area(p):
+            return abs(sum(p[i][0] * p[i - 1][1] - p[i - 1][0] * p[i][1] for i in range(len(p)))) / 2
+
+        arm = (s - a) * 2 * a
+        for pid in ('dpad-up', 'dpad-down', 'dpad-left', 'dpad-right'):
+            self.assertAlmostEqual(area(parts[pid]), arm, places=6, msg=pid)
+        self.assertAlmostEqual(area(parts['dpad-centre']), (2 * a) ** 2, places=6)
+        self.assertGreater(min(y for _, y in parts['dpad-up']), 0)    # up is +y in the CAD frame
+        self.assertLess(max(x for x, _ in parts['dpad-left']), 0)
+
+    def test_pill_size_and_angle(self):
+        p = gen_controller_svg.pill(10, 5, 16, 2, 0)
+        xs, ys = [x for x, _ in p], [y for _, y in p]
+        self.assertAlmostEqual(min(xs), 2)
+        self.assertAlmostEqual(max(xs), 18)
+        self.assertAlmostEqual(max(ys) - min(ys), 2, places=6)
+        q = gen_controller_svg.pill(0, 0, 16, 2, 90)
+        self.assertAlmostEqual(max(y for _, y in q), 8)
+
     def test_real_drawing_fits(self):
         svg = read(os.path.join(ROOT, 'assets', 'controller.svg'))
-        labels, parts = svg_to_gba.label_map(svg, 216)
+        labels, parts = svg_to_gba.label_map(svg, 232)
         tiles, _ = svg_to_gba.tiles_and_map(labels)
         self.assertLessEqual(len(tiles), svg_to_gba.MAX_TILES)
-        self.assertEqual(len(parts), 23)
+        self.assertEqual(len(parts), 25)
         # every part is visible (none fully hidden under a later one)
         self.assertEqual({i for i, n in enumerate(labels.histogram()) if n}, set(range(len(parts) + 1)))
 

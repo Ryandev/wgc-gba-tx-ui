@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Turn assets/controller.svg into GBA graphics: an 8bpp affine background, one palette entry per part.
 
-    python3 tools/svg_to_gba.py SVG OUTDIR [--width 216] [--name ctrl]
+    python3 tools/svg_to_gba.py SVG OUTDIR [--width 232] [--name ctrl]
 
 Writes OUTDIR/<name>.c, OUTDIR/<name>.h and OUTDIR/<name>_preview.png.
 
@@ -182,7 +182,7 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument('svg')
     ap.add_argument('outdir')
-    ap.add_argument('--width', type=int, default=216)
+    ap.add_argument('--width', type=int, default=232)
     ap.add_argument('--name', default='ctrl')
     a = ap.parse_args(argv)
     svg = open(a.svg).read()

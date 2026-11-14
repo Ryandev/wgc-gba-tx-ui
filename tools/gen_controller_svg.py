@@ -1,183 +1,166 @@
 #!/usr/bin/env python3
-"""Generate assets/controller.svg (the AGB-001 front, drawn by us) from a table of dimensions.
+"""Generate assets/controller.svg (the AGB-001 front) from the owner's GBA CAD.
 
     python3 tools/gen_controller_svg.py            # writes assets/controller.svg
 
-Why a table: the outline must be our own drawing (see LICENSES.md). Dimensions are facts; this
-script turns them into our own geometry. No third-party drawing is copied or traced.
+Every shape comes from the owner's own 1:1 CAD model of the console (../CAD; the giant build is
+that model at 9.8067x):
+  - outlines of the shell, shoulders, side trims, lens, LCD window, LED and the button caps are
+    front-view silhouettes traced by tools/cad_trace.py into assets/controller_cad.json;
+  - pockets cut into the shell (speaker grille, START/SELECT recesses, top panel) aren't
+    silhouettes, so they're drawn from the shell's own constants (CAD lib/part/shell.front.py),
+    copied into SHELL_POCKETS below.
+No third-party drawing is used, and no lettering or logos are drawn (owner decision, 2026-11-14).
 
-Units: millimetres, x right from the left edge of the body, y down from the top edge.
-Every value is PROVISIONAL until checked with callipers on a real GBA (tagged 'P' below):
-the provisional numbers are the proportions of a reference drawing rescaled to the published
-outer size (144.5 x 82.0 mm). When a value is measured, change its tag to 'M' and note it.
+Geometry is built in the CAD frame (mm, origin at the shell centre, y up) and mapped to SVG
+(x right from the left-most point, y down from the top-most point) at the end.
 
-The SVG is the committed source of truth for the GBA assets (tools/svg_to_gba.py, next step). It
-can be edited by hand (Inkscape keeps ids). Rerun this script only to regenerate from the table.
-
-Part ids are stable and semantic (the asset pipeline keys palette entries off them):
-  body, shoulder-l, shoulder-r, lens, lcd, top-slot, led, dpad-up, dpad-down, dpad-left,
-  dpad-right, dpad-centre, btn-a, btn-b, start-plate, btn-start, select-plate, btn-select,
-  speaker-1..N. No lettering or logos are drawn (owner decision, 2026-11-14).
+Part ids are stable and semantic (svg_to_gba.py gives each its own palette entry):
+  shoulder-l/r, trim-l/r, body, start-plate, select-plate, speaker-1..5, top-slot, lens, lcd,
+  led, dpad-up/down/left/right/centre, btn-a, btn-b, btn-start, btn-select.
 """
-import math, os
+import json
+import math
+import os
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-OUT = os.path.join(HERE, '..', 'assets', 'controller.svg')
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+OUT = os.path.join(ROOT, 'assets', 'controller.svg')
+TRACE = os.path.join(ROOT, 'assets', 'controller_cad.json')
 
-# ---- the dimension table (mm) --------------------------------------------------------------
-# name: (value, tag)  P = provisional (reference proportions, rescaled), M = measured on a real GBA,
-#                     C = measured from the owner's giant-GBA CAD (../CAD lib/assembly_positions.py and
-#                         lib/step part sizes, 1:1 mm; the model is built at 9.8067x). Converted with
-#                         x = cad_x + 72.25 (centred), y = 41.2 - cad_y (LCD centres aligned).
-D = {
-    'width':            (144.5, 'P'),  # published AGB-001 outer width
-    'height':           (82.0, 'P'),   # published AGB-001 outer height (centre of bottom edge)
-    # Body silhouette, left half, mirrored about x = width/2. (x, y) control points of a smooth
-    # closed curve, clockwise from the top centre: top edge -> shoulder slope -> left end -> bottom.
-    'outline_top':      ([(72.25, 0.2), (43.5, 0.2), (29.0, 5.0), (14.5, 9.5), (7.0, 12.0), (3.0, 23.5)], 'P'),
-    'outline_end':      ([(0.3, 35.5), (0.3, 50.0), (1.5, 64.0)], 'P'),
-    'outline_bottom':   ([(5.5, 69.0), (14.5, 72.5), (29.0, 77.0), (43.5, 81.0), (58.0, 81.7), (72.25, 81.7)], 'P'),
-    # Shoulder buttons: a band along the top-corner curve, only its raised edge shows
-    'shoulder_l':       ((4.5, 33.0, 2.4, 0), 'P'),      # x0, x1, rise above the body edge, (unused)
-    # Screen lens and LCD
-    'lens':             ((34.44, 8.98, 110.06, 73.08), 'C'), # x0, y0, x1, y1: 75.63 x 64.10 at (0, 0.17)
-    'lens_r_top':       (4.96, 'C'),                         # screen_lens.py corner arcs
-    'lens_r_bottom':    (8.03, 'C'),
-    'lcd_size':         ((61.0, 39.5), 'C'),                 # screen_bezel window 61.01 x 39.54
-    'lcd_centre':       ((72.25, 37.3), 'C'),                # the anchor: cad (0, 3.90)
-    'top_slot':         ((72.25, 4.4, 16.5, 3.8), 'P'),      # centre x, centre y, length, height
-    'led':              ((118.4, 14.55, 1.2), 'C'),          # power_led (46.15, 26.65), d 2.37
-    # Controls
-    'dpad':             ((19.71, 34.08, 17.55, 5.75), 'C'),  # centre cad (-52.54, 7.12); span, arm: dpad.py
-    'btn_a':            ((131.33, 31.85, 4.5), 'C'),         # cad (59.08, 9.35); r = button_a.py SHAFT_RADIUS
-    'btn_b':            ((118.33, 36.35, 4.5), 'C'),         # cad (46.08, 4.85)
-    'btn_start':        ((29.32, 53.97, 2.0), 'C'),          # cad (-42.93, -12.77); START above SELECT
-    'btn_select':       ((29.32, 61.97, 2.0), 'C'),          # cad (-42.93, -20.77)
-    'plate':            ((24.0, 52.72, 60.72, 16.94, 5.98, 13.94), 'C'),  # START/SELECT recess (shell.front.py _SS_*):
-                                                         # centre x, START cy, SELECT cy, length, width, slope deg
-    'speaker':          ((121.59, 50.79, 16.72, 1.57, 3.0, -13.95, 5), 'C'),  # shell.front.py _GRILLE_*: centre x,
-                                                         # top slot cy, length, width, pitch, slope deg, count
+# Pockets in the shell front, from CAD lib/part/shell.front.py (_GRILLE_*, _SS_*, _PANEL_*).
+# CAD frame; angle in degrees, counter-clockwise from +x.
+SHELL_POCKETS = {
+    'grille': dict(cx=49.34, first_y=-21.5852, pitch=3.0, count=5, length=16.7243, width=1.5684, angle=13.9486),
+    'ss':     dict(cx=-48.2488, first_y=-19.5206, pitch=8.0, count=2, length=16.9362, width=5.9819, angle=166.0597),
+    'panel':  dict(cx=0.03905, cy=35.43665, length=18.5213, height=4.4913),
 }
+DPAD_ARM = 5.75   # width of each arm of the cross (CAD lib/part/dpad.py ARM_WIDTH)
+
+CSS = ('.body{fill:#5040a8}.shoulder{fill:#382c80}.trim{fill:#40349a}.lens{fill:#202030}'
+       '.lcd{fill:#b0d890}.button{fill:#3c3c4c}.plate{fill:#3c3090}.slot{fill:#281c60}.led{fill:#58e070}')
 
 
-def v(name):
-    return D[name][0]
+# ---- geometry helpers (CAD frame) ----------------------------------------------------------
+def pill(cx, cy, length, width, angle_deg, steps=12):
+    """A capsule (stadium) centred on (cx, cy), `length` overall, as a polygon."""
+    a = math.radians(angle_deg)
+    ux, uy = math.cos(a), math.sin(a)
+    half, r = (length - width) / 2, width / 2
+    pts = []
+    for end, base in ((1, a - math.pi / 2), (-1, a + math.pi / 2)):
+        ex, ey = cx + end * half * ux, cy + end * half * uy
+        for i in range(steps + 1):
+            t = base + math.pi * i / steps
+            pts.append((ex + r * math.cos(t), ey + r * math.sin(t)))
+    return pts
 
 
-# ---- geometry helpers ----------------------------------------------------------------------
+def clip(poly, inside, cross):
+    """Sutherland-Hodgman: keep the part of poly where inside(p) holds; cross(p, q) = boundary point."""
+    out = []
+    for i, cur in enumerate(poly):
+        prev = poly[i - 1]
+        if inside(cur):
+            if not inside(prev):
+                out.append(cross(prev, cur))
+            out.append(cur)
+        elif inside(prev):
+            out.append(cross(prev, cur))
+    return out
+
+
+def clip_x(poly, x, keep_above):
+    def inside(p):
+        return p[0] >= x if keep_above else p[0] <= x
+
+    def cross(p, q):
+        t = (x - p[0]) / (q[0] - p[0])
+        return (x, p[1] + t * (q[1] - p[1]))
+    return clip(poly, inside, cross)
+
+
+def clip_y(poly, y, keep_above):
+    def inside(p):
+        return p[1] >= y if keep_above else p[1] <= y
+
+    def cross(p, q):
+        t = (y - p[1]) / (q[1] - p[1])
+        return (p[0] + t * (q[0] - p[0]), y)
+    return clip(poly, inside, cross)
+
+
+def dpad_parts(outline):
+    """Split the traced cross into four arms and the centre square, so each lights on its own."""
+    xs, ys = [p[0] for p in outline], [p[1] for p in outline]
+    cx, cy, a = (min(xs) + max(xs)) / 2, (min(ys) + max(ys)) / 2, DPAD_ARM / 2
+    centre = clip_y(clip_y(clip_x(clip_x(outline, cx - a, True), cx + a, False), cy - a, True), cy + a, False)
+    return {
+        'dpad-up': clip_y(outline, cy + a, True),
+        'dpad-down': clip_y(outline, cy - a, False),
+        'dpad-left': clip_x(outline, cx - a, False),
+        'dpad-right': clip_x(outline, cx + a, True),
+        'dpad-centre': centre,
+    }
+
+
 def f(x):
     return f'{x:.2f}'.rstrip('0').rstrip('.')
 
 
-def catmull_rom_closed(pts, steps=1):
-    """Closed Catmull-Rom spline through pts, as an SVG cubic-Bezier path."""
-    n = len(pts)
-    d = [f'M{f(pts[0][0])},{f(pts[0][1])}']
-    for i in range(n):
-        p0, p1, p2, p3 = pts[i - 1], pts[i], pts[(i + 1) % n], pts[(i + 2) % n]
-        c1 = (p1[0] + (p2[0] - p0[0]) / 6, p1[1] + (p2[1] - p0[1]) / 6)
-        c2 = (p2[0] - (p3[0] - p1[0]) / 6, p2[1] - (p3[1] - p1[1]) / 6)
-        d.append(f'C{f(c1[0])},{f(c1[1])} {f(c2[0])},{f(c2[1])} {f(p2[0])},{f(p2[1])}')
-    return ' '.join(d) + ' Z'
-
-
-def body_points():
-    w = v('width')
-    left = v('outline_top') + v('outline_end') + v('outline_bottom')
-    # left half runs top-centre -> bottom-centre; mirror it for the right half (bottom -> top)
-    right = [(w - x, y) for x, y in reversed(left[1:-1])]
-    return left + right
-
-
-def rounded_rect(x0, y0, x1, y1, rt, rb):
-    return (f'M{f(x0 + rt)},{f(y0)} H{f(x1 - rt)} A{f(rt)},{f(rt)} 0 0 1 {f(x1)},{f(y0 + rt)} '
-            f'V{f(y1 - rb)} A{f(rb)},{f(rb)} 0 0 1 {f(x1 - rb)},{f(y1)} H{f(x0 + rb)} '
-            f'A{f(rb)},{f(rb)} 0 0 1 {f(x0)},{f(y1 - rb)} V{f(y0 + rt)} A{f(rt)},{f(rt)} 0 0 1 {f(x0 + rt)},{f(y0)} Z')
-
-
-def slanted_pill(x0, y0, x1, y1, thick):
-    """A capsule from (x0,y0) to (x1,y1)."""
-    a = math.atan2(y1 - y0, x1 - x0)
-    nx, ny, r = -math.sin(a) * thick / 2, math.cos(a) * thick / 2, thick / 2
-    return (f'M{f(x0 + nx)},{f(y0 + ny)} L{f(x1 + nx)},{f(y1 + ny)} A{f(r)},{f(r)} 0 0 0 {f(x1 - nx)},{f(y1 - ny)} '
-            f'L{f(x0 - nx)},{f(y0 - ny)} A{f(r)},{f(r)} 0 0 0 {f(x0 + nx)},{f(y0 + ny)} Z')
-
-
 # ---- the drawing ---------------------------------------------------------------------------
-def build():
-    w, h = v('width'), v('height')
-    parts = []   # (id, role, svg element)
+def build(trace=None):
+    if trace is None:
+        with open(TRACE) as fh:
+            trace = json.load(fh)
+    t = {k: [tuple(p) for p in v['outline']] for k, v in trace['parts'].items()}
+    parts = []   # (id, role, polygon in CAD frame), painter's order: first is at the back
 
-    def path(pid, role, d):
-        parts.append((pid, role, f'<path id="{pid}" class="{role}" d="{d}"/>'))
+    def add(pid, role, poly):
+        parts.append((pid, role, poly))
 
-    def circle(pid, role, cx, cy, r):
-        parts.append((pid, role, f'<circle id="{pid}" class="{role}" cx="{f(cx)}" cy="{f(cy)}" r="{f(r)}"/>'))
+    # behind the shell: only the rims that stick out past it show
+    for side in ('l', 'r'):
+        add(f'shoulder-{side}', 'shoulder', t[f'shoulder-{side}'])
+    for side in ('l', 'r'):
+        add(f'trim-{side}', 'trim', t[f'trim-{side}'])
+    add('body', 'body', t['body'])
+    ss, gr, pn = SHELL_POCKETS['ss'], SHELL_POCKETS['grille'], SHELL_POCKETS['panel']
+    for i, name in enumerate(('select', 'start')):   # first_y is the lower recess (SELECT)
+        add(f'{name}-plate', 'plate', pill(ss['cx'], ss['first_y'] + i * ss['pitch'], ss['length'], ss['width'], ss['angle']))
+    for i in range(gr['count']):   # speaker-1 is the top slot
+        y = gr['first_y'] + (gr['count'] - 1 - i) * gr['pitch']
+        add(f'speaker-{i + 1}', 'slot', pill(gr['cx'], y, gr['length'], gr['width'], gr['angle']))
+    add('top-slot', 'slot', pill(pn['cx'], pn['cy'], pn['length'], pn['height'], 0))
+    add('lens', 'lens', t['lens'])
+    add('lcd', 'lcd', t['lcd'])
+    add('led', 'led', t['led'])
+    for pid, poly in dpad_parts(t['dpad']).items():
+        add(pid, 'button', poly)
+    for pid in ('btn-a', 'btn-b', 'btn-start', 'btn-select'):
+        add(pid, 'button', t[pid])
 
-    # shoulders first: a band that follows the body's top-corner curve, raised by `rise`; the body
-    # is drawn over its lower part, so only the sweep along the top corner shows.
-    x0, x1, rise, _ = v('shoulder_l')
-    top = sorted(v('outline_top') + v('outline_end')[:1], key=lambda p: p[0])
-    curve = [(x, y) for x, y in top if x0 - 4 <= x <= x1 + 1]
-    band = [(x, y - rise) for x, y in curve] + [(x, y + 8) for x, y in reversed(curve)]
-    path('shoulder-l', 'shoulder', catmull_rom_closed(band))
-    path('shoulder-r', 'shoulder', catmull_rom_closed([(w - x, y) for x, y in reversed(band)]))
-    path('body', 'body', catmull_rom_closed(body_points()))
-    lx0, ly0, lx1, ly1 = v('lens')
-    path('lens', 'lens', rounded_rect(lx0, ly0, lx1, ly1, v('lens_r_top'), v('lens_r_bottom')))
-    (lw, lh), (lcx, lcy) = v('lcd_size'), v('lcd_centre')
-    parts.append(('lcd', 'lcd', f'<rect id="lcd" class="lcd" x="{f(lcx - lw / 2)}" y="{f(lcy - lh / 2)}" '
-                                f'width="{f(lw)}" height="{f(lh)}"/>'))
-    cx, cy, ln, ht = v('top_slot')
-    path('top-slot', 'slot', slanted_pill(cx - ln / 2 + ht / 2, cy, cx + ln / 2 - ht / 2, cy, ht))
-    circle('led', 'led', *v('led'))
-    # d-pad: four arms + centre, each its own part (each lights independently)
-    cx, cy, span, arm = v('dpad')
-    s, a = span / 2, arm / 2
-    for pid, (ax0, ay0, ax1, ay1) in {'dpad-up': (cx - a, cy - s, cx + a, cy - a),
-                                      'dpad-down': (cx - a, cy + a, cx + a, cy + s),
-                                      'dpad-left': (cx - s, cy - a, cx - a, cy + a),
-                                      'dpad-right': (cx + a, cy - a, cx + s, cy + a)}.items():
-        parts.append((pid, 'button', f'<rect id="{pid}" class="button" x="{f(ax0)}" y="{f(ay0)}" '
-                                     f'width="{f(ax1 - ax0)}" height="{f(ay1 - ay0)}" rx="0.6"/>'))
-    parts.append(('dpad-centre', 'button', f'<rect id="dpad-centre" class="button" x="{f(cx - a)}" y="{f(cy - a)}" '
-                                           f'width="{f(arm)}" height="{f(arm)}"/>'))
-    circle('btn-a', 'button', *v('btn_a'))
-    circle('btn-b', 'button', *v('btn_b'))
-    # start / select: the slanted recess in the shell, the round button at its right end (START above)
-    pcx, start_cy, select_cy, plen, pth, slope = v('plate')
-    ang = math.radians(slope)
-    half = (plen - pth) / 2   # centre to cap centre
-    dx, dy = half * math.cos(ang), half * math.sin(ang)
-    for name, pcy in (('start', start_cy), ('select', select_cy)):
-        path(f'{name}-plate', 'plate', slanted_pill(pcx - dx, pcy - dy, pcx + dx, pcy + dy, pth))
-        circle(f'btn-{name}', 'button', *v(f'btn_{name}'))
-    # speaker grille
-    scx, scy, sln, swd, pitch, sslope, count = v('speaker')
-    ang = math.radians(sslope)
-    dx, dy = (sln - swd) / 2 * math.cos(ang), (sln - swd) / 2 * math.sin(ang)
-    for i in range(count):
-        y = scy + i * pitch
-        path(f'speaker-{i + 1}', 'slot', slanted_pill(scx - dx, y - dy, scx + dx, y + dy, swd))
+    # CAD frame -> SVG: x from the left-most point, y down from the top-most point
+    allx = [x for _, _, poly in parts for x, _ in poly]
+    ally = [y for _, _, poly in parts for _, y in poly]
+    x0, y1 = min(allx), max(ally)
+    w, h = max(allx) - x0, y1 - min(ally)
 
-    provisional = sorted(k for k, (_, tag) in D.items() if tag == 'P')
-    from_cad = sorted(k for k, (_, tag) in D.items() if tag == 'C')
-    css = ('.body{fill:#5040a8}.shoulder{fill:#382c80}.lens{fill:#202030}.lcd{fill:#b0d890}'
-           '.button{fill:#3c3c4c}.plate{fill:#3c3090}.slot{fill:#281c60}.led{fill:#58e070}')
+    def d(poly):
+        return 'M' + ' L'.join(f'{f(x - x0)},{f(y1 - y)}' for x, y in poly) + ' Z'
+
     out = [f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {f(w)} {f(h)}" width="{f(w)}mm" height="{f(h)}mm">',
-           '<!-- wgc-gba-tx-ui: Game Boy Advance (AGB-001) front, our own drawing from a dimension table',
-           '     (tools/gen_controller_svg.py). Units: mm. Part ids are used by the asset pipeline;',
-           '     colours here are only a preview (the ROM assigns palette roles by class/id).',
-           f'     From the owner\'s CAD (1:1): {", ".join(from_cad)}',
-           f'     Provisional (proportions of a reference, rescaled): {", ".join(provisional)} -->',
-           f'<style>{css}</style>']
-    out += [el for _, _, el in parts]
+           '<!-- wgc-gba-tx-ui: Game Boy Advance (AGB-001) front, generated by tools/gen_controller_svg.py',
+           '     from the owner\'s 1:1 CAD (outlines: assets/controller_cad.json; shell pockets:',
+           '     lib/part/shell.front.py constants). Units: mm. Part ids are used by the asset pipeline;',
+           '     colours here are only a preview. -->',
+           f'<style>{CSS}</style>']
+    out += [f'<path id="{pid}" class="{role}" d="{d(poly)}"/>' for pid, role, poly in parts]
     out.append('</svg>')
     return '\n'.join(out) + '\n', parts
 
 
 if __name__ == '__main__':
     svg, parts = build()
-    os.makedirs(os.path.dirname(OUT), exist_ok=True)
-    open(OUT, 'w').write(svg)
+    with open(OUT, 'w') as fh:
+        fh.write(svg)
     print(f'wrote {os.path.relpath(OUT)} ({len(parts)} parts)')
