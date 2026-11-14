@@ -18,7 +18,7 @@ No third-party code: operators are simple, deliberate source rewrites. link_writ
 import os, re, shutil, subprocess, sys, tempfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DEFAULT = ['src/link.c', 'src/core/keyword.c', 'src/core/boot.c', 'src/core/pairing.c', 'src/core/text.c']
+DEFAULT = ['src/link.c', 'src/main.c', 'src/core/keyword.c', 'src/core/boot.c', 'src/core/pairing.c', 'src/core/text.c']
 
 # (name, regex, replacement). Applied one occurrence at a time.
 OPERATORS = [
@@ -83,7 +83,7 @@ def run_one(mt, tmp):
                         f'{b}/wgc-gba-tx-ui.gba', 'v1.1a'], capture_output=True, text=True)
     if r.returncode: return 'KILLED (emulator)'
     r = subprocess.run([sys.executable, os.path.join(ROOT, 'tests/visual.py'), os.path.join(ROOT, 'build/emu_harness'),
-                        f'{b}/wgc-gba-tx-ui.gba', 'v1.1a'], capture_output=True, text=True)
+                        f'{b}/wgc-gba-tx-ui.gba', 'v1.1a', f'--out={tmp}/visual'], capture_output=True, text=True)
     return 'KILLED (visual)' if r.returncode else 'SURVIVED'
 
 

@@ -195,6 +195,12 @@ countdown bar. It all hides after about 3 s from the last L/R press. See `mockup
   see `HARDWARE.md` §4.4). A 6-bit path would also drop bit 6 of channels ≥ 64.
 - *Accept:* the bytes match the stock config log for the same values.
 
+### Boot flash note (found by golden tests, 2026-11-14)
+- For about 7 frames after power-on the screen is **white**, in stock *and* ours: the crt0
+  clears RAM with the display force-blanked before `main()` runs. For Select+Down "black screen"
+  users (backlit mods) a black boot would be better. That needs our own crt0 (set the backdrop or
+  DISPCNT before the clear), or a faster clear. Phase 1 candidate; verify on hardware.
+
 ### F. Remember channel and address (Phase 1 simple / Phase 4 research)
 - **Simple (Phase 1):** set the defaults at **build time** (`-DDEFAULT_CH=… -DDEFAULT_ADDR=…`).
   The wizard and status bar then start from *your* pairing instead of 1/1/1.

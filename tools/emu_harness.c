@@ -7,6 +7,7 @@
 // Steps:  k:KEYS   set held keys (A B s=Select S=Start > < ^ v r=R l=L, '-' = none)
 //         f:N      run N frames
 //         p:NAME   write outdir/NAME.ppm (240x160 RGB)
+//         dirty    start with garbage VRAM + palette (like real hardware) to catch missing clears
 // Keys given before the first f: step are "held at boot".
 //
 // outdir/cart_writes.log, one line per event:
@@ -157,11 +158,32 @@ int main(int argc, char **argv)
     }
     fprintf(wlog, "# W frame cycle addr width value | K frame cycle keys\n");
 
+    // "dirty" (any position): start with garbage VRAM + palette RAM, like real hardware (VRAM isn't
+    // zeroed; the BIOS leaves its logo there), so a missing clear shows up in screenshots.
+    int dirty = 0;
+    for (int j = 3; j < argc; ++j) dirty |= strcmp(argv[j], "dirty") == 0;
+
     uint32_t keys = 0;
     int i = 3;
-    for (; i < argc && argv[i][0] == 'k'; ++i) keys = parseKeys(argv[i] + 2);
+    for (; i < argc && (argv[i][0] == 'k' || strcmp(argv[i], "dirty") == 0); ++i)
+        if (argv[i][0] == 'k') keys = parseKeys(argv[i] + 2);
     core->setKeys(core, keys);
     core->reset(core);
+    if (dirty) {
+        uint32_t x = 0x2545F491u; // xorshift32 with a fixed seed: deterministic garbage
+        for (uint32_t a = 0; a < 0x18000; a += 4) {
+            x ^= x << 13;
+            x ^= x >> 17;
+            x ^= x << 5;
+            core->rawWrite32(core, 0x06000000 + a, -1, x);
+        }
+        for (uint32_t a = 0; a < 0x400; a += 4) {
+            x ^= x << 13;
+            x ^= x >> 17;
+            x ^= x << 5;
+            core->rawWrite32(core, 0x05000000 + a, -1, x);
+        }
+    }
     setKeys(keys);
     for (; i < argc; ++i) {
         const char *a = argv[i];

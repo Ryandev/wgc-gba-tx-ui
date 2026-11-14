@@ -104,22 +104,24 @@ $(B)/emu_harness: tools/emu_harness.c
 test: $(B)/$(NAME).gba $(B)/emu_harness
 	python3 tests/run_tests.py $(B)/emu_harness $(B)/$(NAME).gba v1.1a
 
-test-v11b: $(B)/emu_harness
+# The v1.1b ROM is one file target shared by test-v11b and visual, so make -j can't race on it.
+$(B)/v11b/$(NAME).gba: $(SRC_C) $(SRC_S) $(wildcard src/*.h src/core/*.h) ld/gba_cart.ld $(DEPS)/.stamp
 	$(MAKE) --no-print-directory B=$(B)/v11b DEPS=$(DEPS) PROTOCOL=V11B $(B)/v11b/$(NAME).gba
+
+test-v11b: $(B)/emu_harness $(B)/v11b/$(NAME).gba
 	python3 tests/run_tests.py $(B)/emu_harness $(B)/v11b/$(NAME).gba v1.1b
 
 test-all: test test-v11b
 
 # Golden-image tests (pixel-exact, tests/visual/golden/<ver>/). visual-approve only after looking.
-visual: $(B)/$(NAME).gba $(B)/emu_harness
-	@$(MAKE) --no-print-directory B=$(B)/v11b DEPS=$(DEPS) PROTOCOL=V11B $(B)/v11b/$(NAME).gba >/dev/null
+visual: $(B)/$(NAME).gba $(B)/v11b/$(NAME).gba $(B)/emu_harness
 	python3 tests/visual.py $(B)/emu_harness $(B)/$(NAME).gba v1.1a
 	python3 tests/visual.py $(B)/emu_harness $(B)/v11b/$(NAME).gba v1.1b
 
-visual-approve: $(B)/$(NAME).gba $(B)/emu_harness
-	@$(MAKE) --no-print-directory B=$(B)/v11b DEPS=$(DEPS) PROTOCOL=V11B $(B)/v11b/$(NAME).gba >/dev/null
-	python3 tests/visual.py $(B)/emu_harness $(B)/$(NAME).gba v1.1a --approve
-	python3 tests/visual.py $(B)/emu_harness $(B)/v11b/$(NAME).gba v1.1b --approve
+# make visual-approve [SCREEN=pairing,dpad]: copies only captures that changed (after you looked)
+visual-approve: $(B)/$(NAME).gba $(B)/v11b/$(NAME).gba $(B)/emu_harness
+	python3 tests/visual.py $(B)/emu_harness $(B)/$(NAME).gba v1.1a --approve --screen=$(SCREEN)
+	python3 tests/visual.py $(B)/emu_harness $(B)/v11b/$(NAME).gba v1.1b --approve --screen=$(SCREEN)
 
 # Re-record tests/baselines/ from the stock ROMs (local only: reference/ is not in the repo)
 baselines: $(B)/emu_harness
@@ -156,7 +158,7 @@ coverage: unit
 # ---- mutation testing (ENGINEERING.md §4) ---------------------------------------------------
 # Mutates src/link.c + src/core/*.c, rebuilds the real ARM ROM per mutant, and runs unit tests
 # (both protocols) + the v1.1a emulator suite. Fails if any mutant survives. ~4-6 min.
-MUTATE_SRC ?= src/link.c $(CORE_SRC)   # all of src/core (chunk1 review: pairing.c was missed)
+MUTATE_SRC ?= src/link.c src/main.c $(CORE_SRC)   # chunk reviews: pairing.c, then main.c were missed
 mutate: $(B)/emu_harness $(DEPS)/.stamp
 	python3 tests/mutate.py $(MUTATE_SRC)
 

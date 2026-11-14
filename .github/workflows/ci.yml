@@ -12,7 +12,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends gcc-arm-none-eabi binutils-arm-none-eabi \
-            libnewlib-arm-none-eabi build-essential git libmgba-dev cppcheck clang-tidy clang-format gcovr
+            libnewlib-arm-none-eabi build-essential git libmgba-dev=0.10.2+dfsg-1.1build3 cppcheck clang-tidy clang-format gcovr
       - name: Cache pinned dependencies
         uses: actions/cache@v4
         with:
@@ -37,7 +37,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends gcc-arm-none-eabi binutils-arm-none-eabi \
-            libnewlib-arm-none-eabi build-essential git libmgba-dev
+            libnewlib-arm-none-eabi build-essential git libmgba-dev=0.10.2+dfsg-1.1build3
       - name: Cache pinned dependencies
         uses: actions/cache@v4
         with:

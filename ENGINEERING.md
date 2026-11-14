@@ -151,9 +151,10 @@ run**. That allows exact comparison, no fuzzy thresholds:
   they're fine to publish.
 - `make visual`: render every script, compare pixel-exact. On mismatch, write
   `build/visual/<name>.diff.png` (changed pixels highlighted) and fail.
-- `make visual-approve NAME=…`: copy the new render over the golden after a human has looked at it.
-- Pin the mGBA version (Ubuntu's 0.10.2) in CI. A different emulator version is a legitimate
-  reason to re-approve.
+- `make visual-approve [SCREEN=pairing,dpad]`: copy changed renders over their goldens, only after a
+  human has looked at them (`build/visual/<ver>/*.actual.png`).
+- CI pins `libmgba-dev=0.10.2+dfsg-1.1build3` (Ubuntu 24.04). A different emulator version is a
+  legitimate reason to re-approve.
 - Animated screens (splash, zoom) are captured at fixed frame numbers, so they're deterministic too.
 - Bonus: the same captures can be laid next to the design mockups for review (not a pass/fail check).
 

@@ -10,26 +10,33 @@
 #include "core/pairing.h"
 #include "core/text.h"
 
-#define VERSION "0.1.0"
+#define VERSION        "0.1.0"
+#define TEXT_COLS      30        // 240 px / 8 px font
+#define SBB_TEXT       31        // screenblock holding the text map
+#define SBB_ENTRIES    (32 * 32) // halfwords in one screenblock
+#define BG_PAL_ENTRIES 256
 
 static void text_init(void)
 {
-    REG_DISPCNT = DCNT_MODE0 | DCNT_BG0;
-    tte_init_se_default(0, BG_CBB(0) | BG_SBB(31));
+    // Set everything up first, enable the layer last: real VRAM isn't zeroed at boot, so clear the
+    // screenblock (Gemini chunk3 F3).
+    REG_DISPCNT = DCNT_MODE0;
+    tte_init_se_default(0, BG_CBB(0) | BG_SBB(SBB_TEXT));
+    memset16(se_mem[SBB_TEXT], 0, SBB_ENTRIES);
     pal_bg_mem[0] = RGB15(4, 4, 6);
+    REG_DISPCNT = DCNT_MODE0 | DCNT_BG0;
 }
 
-static void at(int col, int row, const char *s)
+static void at(int row, const char *s)
 {
-    // Write s at (col,row), padded with spaces to the end of the 30-column line.
-    char buf[32];
-    int width = 30 - col;
+    // Write s at column 0 of `row`, padded with spaces to the full line (clears old text).
+    char buf[TEXT_COLS + 1]; // mutate: equivalent (larger buffer changes nothing)
     int n = (int)strlen(s);
-    if (n > width) n = width;
+    if (n > TEXT_COLS) n = TEXT_COLS; // mutate: equivalent (safety clamp; every caller is shorter)
     memcpy(buf, s, (size_t)n);
-    memset(buf + n, ' ', (size_t)(width - n));
-    buf[width] = 0;
-    tte_set_pos(col * 8, row * 8);
+    memset(buf + n, ' ', (size_t)(TEXT_COLS - n));
+    buf[TEXT_COLS] = 0;
+    tte_set_pos(0, row * 8);
     tte_write(buf);
 }
 
@@ -43,22 +50,22 @@ static void pairing_menu(void)
     pairing_state p;
     pairing_init(&p, 1, 1, 1); // TODO Phase 1: build-time defaults (SPEC F)
     u16 prev = pressed_now();
-    at(0, 3, "--- PAIRING ---");
-    at(0, 9, "A: SEND  (THEN POWER CYCLE)");
+    at(3, "--- PAIRING ---");
+    at(9, "A: SEND  (THEN POWER CYCLE)");
     for (;;) {
         VBlankIntrWait();
         u16 down = pressed_now();
         u16 hit = (u16)(down & ~prev);
         prev = down;
         for (int i = 0; i < PAIR_ROWS; i++) {
-            char line[32];
+            char line[TEXT_COLS + 1]; // mutate: equivalent for +-1 (menu rows are < 20 chars)
             fmt_menu_row(line, sizeof line, name[i], p.val[i], i == p.row);
-            at(0, 5 + i, line);
+            at(5 + i, line);
         }
         if (pairing_step(&p, hit, down) == PAIR_SEND) {
             link_pair(p.val[PAIR_CHANNEL], p.val[PAIR_ADDRESS], p.val[PAIR_PACKETS]);
-            at(0, 11, "PAIRING SENT. NOT SENDING");
-            at(0, 12, "BUTTONS. POWER CYCLE TO PLAY");
+            at(11, "PAIRING SENT. NOT SENDING");
+            at(12, "BUTTONS. POWER CYCLE TO PLAY");
             for (;;) VBlankIntrWait(); // the ATtiny repeats the config until power-off
         }
     }
@@ -75,23 +82,26 @@ int main(void)
     if (plan.screen == SCREEN_BLACK) {
         // Black screen (backlit mods), done the stock way: BG0 on, whole palette black.
         // A layers-off frame with backdrop 0x0000 renders white in mGBA 0.10 (found by the golden
-        // tests); BG0 + black palette is black in both, and matches the stock ROM.
-        text_init();
-        memset16(pal_bg_mem, 0, 256);
+        // tests); BG0 + black palette is black in both, and matches the stock ROM. Palette and map
+        // are zeroed before the layer is enabled, so no frame ever shows anything else.
+        memset16(pal_bg_mem, 0, BG_PAL_ENTRIES);
+        memset16(se_mem[SBB_TEXT], 0, SBB_ENTRIES);
+        REG_BG0CNT = BG_CBB(0) | BG_SBB(SBB_TEXT); // mutate: equivalent (all-black palette: any map is black)
+        REG_DISPCNT = DCNT_MODE0 | DCNT_BG0;
     } else if (plan.screen == SCREEN_OFF) {
         REG_DISPCNT = DCNT_MODE0; // screen "off": plain backdrop, nothing drawn
         pal_bg_mem[0] = RGB15(8, 8, 8);
     } else {
         text_init();
-        at(0, 0, "WGC-GBA-TX-UI " VERSION);
-        at(0, 1, "PROTOCOL " PROTO_NAME);
+        at(0, "WGC-GBA-TX-UI " VERSION);
+        at(1, "PROTOCOL " PROTO_NAME);
         if (plan.settings) pairing_menu(); // never returns
     }
 
     link_sync();
     if (plan.gb_mode) { // GB mode: no L/R
         link_gb_mode();
-        if (plan.screen == SCREEN_NORMAL) at(0, 2, "GB MODE");
+        if (plan.screen == SCREEN_NORMAL) at(2, "GB MODE");
     }
 
     link_start();
@@ -102,7 +112,7 @@ int main(void)
         if (plan.screen == SCREEN_NORMAL && link_packets != last) {
             last = link_packets;
             fmt_hex3(buf + 5, link_last_word);
-            at(0, 4, buf);
+            at(4, buf);
         }
     }
 }

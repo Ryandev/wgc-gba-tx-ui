@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """Golden-image (screenshot) tests: render screens in headless mGBA and compare pixel-exact.
 
-    python3 tests/visual.py <emu_harness> <rom.gba> <v1.1a|v1.1b> [--approve]
+    python3 tests/visual.py <emu_harness> <rom.gba> <v1.1a|v1.1b> [--approve] [--screen=a,b] [--out=DIR]
 
 mGBA is deterministic: the same ROM + key script gives identical pixels every run, so the check is
 exact (no fuzzy threshold). On mismatch it writes build/visual/<ver>/<name>.actual.png and
 <name>.diff.png (changed pixels in red over a dimmed copy) and fails. --approve copies the
-renders over the goldens. Only do that after looking at them.
+renders over the goldens, only for captures that changed. Only do that after looking at them.
 Goldens: tests/visual/golden/<ver>/<name>.png (our own renders, fine to publish).
 """
 import os, shutil, subprocess, sys, tempfile
@@ -14,24 +14,39 @@ from pngio import read_png, write_png, read_ppm
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
-# name -> harness steps ending in p:shot (the frame captured)
+# name -> harness steps; every p:<capture> becomes golden <name>__<capture>.png (several per screen).
 SCREENS = {
-    'boot_idle':      ['f:30', 'p:shot'],
-    'keys_lra':       ['f:30', 'k:lrA', 'f:3', 'p:shot'],            # KEYS 301 (v1.1a) / F03 (v1.1b, X)
-    'keys_each_dpad': ['f:30', 'k:^', 'f:2', 'k:v', 'f:2', 'k:<', 'f:2', 'k:>', 'f:3', 'p:shot'],
-    'gb_mode':        ['k:A', 'f:30', 'k:-', 'f:3', 'p:shot'],
-    'screen_off':     ['k:s', 'f:30', 'p:shot'],
-    'screen_black':   ['k:sv', 'f:30', 'p:shot'],
-    'pairing_menu':   ['k:S', 'f:30', 'k:-', 'f:3', 'k:>', 'f:2', 'k:-', 'f:2', 'k:v', 'f:2', 'k:-', 'f:3', 'p:shot'],
-    'pairing_sent':   ['k:S', 'f:30', 'k:-', 'f:3', 'k:A', 'f:2', 'k:-', 'f:5', 'p:shot'],
+    'boot':    ['f:30', 'p:idle'],
+    # each D-pad direction captured on its own (chunk3 F1: a single final shot only checked Right)
+    'dpad':    ['f:30', 'k:^', 'f:3', 'p:up', 'k:v', 'f:3', 'p:down', 'k:<', 'f:3', 'p:left', 'k:>', 'f:3', 'p:right'],
+    # chords chosen so the hex readout shows every digit 0-F (chunk3 F1)
+    'chords':  ['f:30', 'k:lrA', 'f:3', 'p:lra', 'k:lrAB', 'f:3', 'p:lrab', 'k:sSB', 'f:3', 'p:ssb',
+                'k:Av<s', 'f:3', 'p:a_down_left_sel', 'k:r^<S', 'f:3', 'p:r_up_left_start',
+                'k:B>v', 'f:3', 'p:b_right_down', 'k:A>', 'f:3', 'p:hex5', 'k:B<', 'f:3', 'p:hexA',
+                'k:AB<', 'f:3', 'p:hexB', 'k:A><', 'f:3', 'p:hexD', 'k:B><', 'f:3', 'p:hexE', 'k:^v<>', 'f:3', 'p:hex3C',
+                'k:-', 'f:3', 'p:released'],
+    'gb_mode': ['k:A', 'f:30', 'k:-', 'f:3', 'p:shown'],
+    'off':     ['k:s', 'f:30', 'p:grey'],
+    # frame 9 = first frame after startup; frames 1-7 are white in stock too (crt0 clears RAM under forced
+    # blank before main), so they're not a useful golden (see SPEC.md, boot flash note)
+    'black':   ['k:sv', 'f:9', 'p:frame9', 'f:21', 'p:frame30'],
+    'pairing': ['k:S', 'f:30', 'k:-', 'f:3', 'p:menu', 'k:>', 'f:2', 'k:-', 'f:2', 'k:v', 'f:2', 'k:-', 'f:3',
+                'p:moved', 'k:v', 'f:2', 'k:-', 'f:2', 'k:<', 'f:2', 'k:-', 'f:3', 'p:packets_min',
+                'k:A', 'f:2', 'k:-', 'f:5', 'p:sent'],
 }
 
 
+def captures(steps):
+    return [st[2:] for st in steps if st.startswith('p:')]
+
+
 def render(harness, rom, steps):
+    """-> {capture: (w, h, rgb)}"""
     with tempfile.TemporaryDirectory() as d:
-        r = subprocess.run([harness, rom, d] + steps, capture_output=True, text=True)
+        # 'dirty': VRAM/palette start as garbage, like real hardware, so a missing clear is visible
+        r = subprocess.run([harness, rom, d, 'dirty'] + steps, capture_output=True, text=True)
         if r.returncode: raise RuntimeError(f'harness: {r.stderr.strip()}')
-        return read_ppm(os.path.join(d, 'shot.ppm'))
+        return {c: read_ppm(os.path.join(d, c + '.ppm')) for c in captures(steps)}
 
 
 def diff_image(w, h, gold, act):
@@ -48,38 +63,49 @@ def diff_image(w, h, gold, act):
 
 def main():
     harness, rom, ver = sys.argv[1:4]
+    opts = dict(a.split('=', 1) for a in sys.argv[4:] if '=' in a)
     approve = '--approve' in sys.argv
+    only = set(filter(None, opts.get('--screen', os.environ.get('SCREEN', '')).split(',')))
     gold_dir = os.path.join(HERE, 'visual', 'golden', ver)
-    out_dir = os.path.join(os.path.dirname(HERE), 'build', 'visual', ver)
+    out_dir = opts.get('--out', os.path.join(os.path.dirname(HERE), 'build', 'visual', ver))
     os.makedirs(gold_dir, exist_ok=True)
     os.makedirs(out_dir, exist_ok=True)
-    fails = 0
-    for name, steps in SCREENS.items():
-        w, h, act = render(harness, rom, steps)
-        gold_path = os.path.join(gold_dir, name + '.png')
-        write_png(os.path.join(out_dir, name + '.actual.png'), w, h, act)
-        if approve:
-            shutil.copy(os.path.join(out_dir, name + '.actual.png'), gold_path)
-            print(f'APPROVED {ver}/{name}')
-            continue
-        if not os.path.exists(gold_path):
-            print(f'FAIL  {ver}/{name:16} no golden (review build/visual/{ver}/{name}.actual.png, then make visual-approve)')
-            fails += 1
-            continue
-        gw, gh, gold = read_png(gold_path)
-        if (gw, gh) != (w, h):
-            print(f'FAIL  {ver}/{name:16} size {w}x{h} != golden {gw}x{gh}')
-            fails += 1
-            continue
-        changed, dimg = diff_image(w, h, gold, act)
-        if changed:
-            write_png(os.path.join(out_dir, name + '.diff.png'), w, h, dimg)
-            print(f'FAIL  {ver}/{name:16} {changed} pixels differ -> build/visual/{ver}/{name}.diff.png')
-            fails += 1
-        else:
-            print(f'PASS  {ver}/{name}')
+    total = fails = 0
+    for screen, steps in SCREENS.items():
+        if only and screen not in only: continue
+        for cap, (w, h, act) in render(harness, rom, steps).items():
+            name, total = f'{screen}__{cap}', total + 1
+            gold_path = os.path.join(gold_dir, name + '.png')
+            act_path, diff_path = os.path.join(out_dir, name + '.actual.png'), os.path.join(out_dir, name + '.diff.png')
+            write_png(act_path, w, h, act)
+            if os.path.exists(diff_path): os.remove(diff_path)        # no stale diffs (chunk3 F6)
+            gold = read_png(gold_path) if os.path.exists(gold_path) else None
+            same = gold is not None and gold[:2] == (w, h) and gold[2] == act
+            if approve:
+                if not same:
+                    shutil.copy(act_path, gold_path)
+                    print(f'APPROVED {ver}/{name}' + ('' if gold else ' (new)'))
+                continue
+            if gold is None:
+                print(f'FAIL  {ver}/{name:28} no golden (look at {act_path}, then make visual-approve SCREEN={screen})')
+                fails += 1
+            elif gold[:2] != (w, h):
+                print(f'FAIL  {ver}/{name:28} size {w}x{h} != golden {gold[0]}x{gold[1]}')
+                fails += 1
+            elif not same:
+                changed, dimg = diff_image(w, h, gold[2], act)
+                write_png(diff_path, w, h, dimg)
+                print(f'FAIL  {ver}/{name:28} {changed} pixels differ -> {diff_path}')
+                fails += 1
+            else:
+                print(f'PASS  {ver}/{name}')
+    known = {f'{sc}__{c}.png' for sc, st in SCREENS.items() for c in captures(st)}
+    orphans = sorted(set(os.listdir(gold_dir)) - known) if not only else []
+    for o in orphans:
+        print(f'FAIL  {ver}/{o} golden has no screen (delete it)')
+    fails += len(orphans)
     if not approve:
-        print(f'\nvisual {ver}: {len(SCREENS) - fails}/{len(SCREENS)} screens match their goldens')
+        print(f'\nvisual {ver}: {total - fails}/{total} captures match their goldens')
     sys.exit(1 if fails else 0)
 
 
