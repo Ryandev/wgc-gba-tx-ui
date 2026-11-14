@@ -9,6 +9,10 @@
 #   make check            format-check + lint + test-all (what CI and the pre-push hook run)
 #   make hooks            enable the repo's git hooks (.githooks/pre-push)
 
+# bash with pipefail so filtered tool output keeps the tool's exit code
+SHELL       := /bin/bash
+.SHELLFLAGS := -o pipefail -c
+
 PROTOCOL ?= V11A
 NAME     := wgc-gba-tx-ui
 B        := build
@@ -118,7 +122,8 @@ lint: $(DEPS)/.stamp
 	  -Wno-analyzer-use-of-uninitialized-value -isystem $(TONC)/include \
 	  $(LINT_DEFS) -c $$f -o /dev/null || exit 1; done
 	@echo "lint: clang-tidy"
-	@clang-tidy --quiet $(LINT_SRC) -- $(TIDY_ARGS)
+	@# "N warnings generated" counts third-party header warnings that HeaderFilterRegex hides
+	@clang-tidy --quiet $(LINT_SRC) -- $(TIDY_ARGS) 2>&1 | { grep -v -e 'warnings generated' -e '^\[[0-9]*/[0-9]*\] Processing' || true; }
 	@echo "lint: cppcheck"
 	@cppcheck -q --std=c11 --enable=warning,style,performance,portability --inline-suppr --error-exitcode=1 \
 	  --suppress=missingIncludeSystem --suppress='*:$(DEPS)/*' $(LINT_DEFS) -I src -I $(TONC)/include src/
