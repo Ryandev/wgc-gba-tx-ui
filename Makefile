@@ -1,5 +1,5 @@
 # wgc-gba-tx-ui build. Needs: gcc-arm-none-eabi, binutils-arm-none-eabi, libnewlib-arm-none-eabi,
-# build-essential, git, python3-pil (font generator) (and libmgba-dev for `make test`).
+# build-essential, git, python3-pil + librsvg2-bin (asset generators) (and libmgba-dev for `make test`).
 #
 #   make                  ROM for the v1.1a cart protocol  -> build/wgc-gba-tx-ui.gba
 #   make PROTOCOL=V11B    ROM for v1.1b (2023+) carts
@@ -34,7 +34,7 @@ ARCH     := -mcpu=arm7tdmi -mthumb-interwork
 WARN     := -Wall -Wextra -Wshadow -Wconversion -Wsign-conversion -Wcast-align -Wstrict-prototypes \
             -Wmissing-prototypes -Wundef -Wdouble-promotion -Wvla -Wformat=2 -Wnull-dereference -Werror
 CFLAGS   := $(ARCH) -O2 -std=gnu17 $(WARN) -ffunction-sections -fdata-sections -isystem $(TONC)/include \
-            -DPROTOCOL_$(PROTOCOL)
+            -DPROTOCOL_$(PROTOCOL) -I$(B)/gen
 GCCLIB   := $(dir $(shell $(CC) -mcpu=arm7tdmi -mthumb -print-libgcc-file-name))
 LDFLAGS  := $(ARCH) -mthumb -nostartfiles -T ld/gba_cart.ld -Wl,--gc-sections \
             -Wl,--no-warn-rwx-segments -Wl,-Map,$(B)/$(NAME).map
@@ -42,7 +42,8 @@ LDFLAGS  := $(ARCH) -mthumb -nostartfiles -T ld/gba_cart.ld -Wl,--gc-sections \
 SRC_C    := $(wildcard src/*.c src/core/*.c)
 SRC_S    := $(wildcard src/*.s)
 # Generated from assets/ by tools/ (never committed; rebuilt when the asset or the tool changes)
-GEN_C    := $(B)/gen/font_ps2p.c
+GEN_C    := $(B)/gen/font_ps2p.c $(B)/gen/ctrl.c
+GEN_H    := $(B)/gen/ctrl.h
 OBJS     := $(SRC_C:src/%.c=$(B)/obj/%.o) $(SRC_S:src/%.s=$(B)/obj/%.o) $(GEN_C:$(B)/gen/%.c=$(B)/obj/gen/%.o)
 
 .PHONY: all deps tools-test test test-v11b test-all visual visual-approve baselines unit unit-fast coverage mutate lint lint-one format format-check check hooks run clean
@@ -80,11 +81,11 @@ $(B)/.protocol-$(PROTOCOL):
 	@for f in $(B)/.protocol-*; do [ -f "$$f" ] && unlink "$$f"; done; true
 	@touch $@
 
-$(B)/obj/%.iwram.o: src/%.iwram.c $(DEPS)/.stamp $(B)/.protocol-$(PROTOCOL)
+$(B)/obj/%.iwram.o: src/%.iwram.c $(DEPS)/.stamp $(B)/.protocol-$(PROTOCOL) | $(GEN_H)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -MMD -MP -marm -c $< -o $@
 
-$(B)/obj/%.o: src/%.c $(DEPS)/.stamp $(B)/.protocol-$(PROTOCOL)
+$(B)/obj/%.o: src/%.c $(DEPS)/.stamp $(B)/.protocol-$(PROTOCOL) | $(GEN_H)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -MMD -MP -mthumb -c $< -o $@
 
@@ -92,7 +93,11 @@ $(B)/obj/%.o: src/%.c $(DEPS)/.stamp $(B)/.protocol-$(PROTOCOL)
 $(B)/gen/font_ps2p.c: assets/fonts/PressStart2P-Regular.ttf tools/ttf_to_tfont.py
 	python3 tools/ttf_to_tfont.py $< ps2pFont $@
 
-$(B)/obj/gen/%.o: $(B)/gen/%.c $(DEPS)/.stamp
+# Controller drawing -> 8bpp affine tiles + map + palette (one palette entry per SVG part)
+$(B)/gen/ctrl.c $(B)/gen/ctrl.h &: assets/controller.svg tools/svg_to_gba.py
+	python3 tools/svg_to_gba.py $< $(B)/gen --name ctrl
+
+$(B)/obj/gen/%.o: $(B)/gen/%.c $(DEPS)/.stamp | $(GEN_H)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -MMD -MP -mthumb -c $< -o $@
 
@@ -123,7 +128,7 @@ test: $(B)/$(NAME).gba $(B)/emu_harness
 
 # The v1.1b ROM is one file target shared by test-v11b and visual, so make -j can't race on it.
 $(B)/v11b/$(NAME).gba: $(SRC_C) $(SRC_S) $(wildcard src/*.h src/core/*.h) ld/gba_cart.ld $(DEPS)/.stamp \
-                       $(wildcard assets/fonts/*.ttf tools/ttf_to_tfont.py)
+                       $(wildcard assets/fonts/*.ttf assets/*.svg tools/ttf_to_tfont.py tools/svg_to_gba.py)
 	$(MAKE) --no-print-directory B=$(B)/v11b DEPS=$(DEPS) PROTOCOL=V11B $(B)/v11b/$(NAME).gba
 
 test-v11b: $(B)/emu_harness $(B)/v11b/$(NAME).gba

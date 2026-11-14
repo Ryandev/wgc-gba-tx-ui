@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 """Tests for the asset generators in tools/ (run by `make tools-test`, part of `make check`)."""
 import os
+import random
 import sys
 import tempfile
 import unittest
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, 'tools'))
+import svg_to_gba  # noqa: E402
 import ttf_to_tfont  # noqa: E402
 
 FONT = os.path.join(ROOT, 'assets', 'fonts', 'PressStart2P-Regular.ttf')
@@ -60,6 +62,68 @@ class TtfToTfont(unittest.TestCase):
         font = ImageFont.truetype(FONT, 12)  # 12 px: 1.5 px per font pixel
         with self.assertRaises(ValueError):
             ttf_to_tfont.glyph_rows(font, 'A')
+
+
+# 32x16 units rendered at 32 px wide = 1 px per unit, so edges fall exactly on pixel boundaries.
+SVG = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 16" width="32mm" height="16mm">
+<style>.a{fill:#ff0000}.b{fill:#00ff08}</style>
+<rect id="back" class="a" x="0" y="0" width="16" height="16"/>
+<rect id="front" class="b" x="8" y="0" width="8" height="8"/>
+</svg>"""
+
+
+class SvgToGba(unittest.TestCase):
+    def test_parts_painters_order_and_tiles(self):
+        labels, parts = svg_to_gba.label_map(SVG, 32)
+        self.assertEqual(parts, [('back', 'a'), ('front', 'b')])
+        self.assertEqual(labels.size, (32, 16))
+        px = labels.load()
+        self.assertEqual((px[0, 0], px[8, 0], px[15, 7], px[8, 8], px[16, 0]), (1, 2, 2, 1, 0))
+        tiles, amap = svg_to_gba.tiles_and_map(labels)
+        # blank, all-'back', all-'front' (the two lower 'back' tiles dedupe with the first)
+        self.assertEqual(len(tiles), 3)
+        self.assertEqual(amap[:4], [1, 2, 0, 0])
+        self.assertEqual(amap[32:36], [1, 1, 0, 0])
+        self.assertEqual(len(amap), 1024)
+
+    def test_palette_is_bgr555_from_css_classes(self):
+        self.assertEqual(svg_to_gba.class_colours(SVG), {'a': (255, 0, 0), 'b': (0, 255, 8)})
+        self.assertEqual(svg_to_gba.rgb15((255, 0, 0)), 0x001F)
+        self.assertEqual(svg_to_gba.rgb15((0, 255, 8)), 31 << 5 | 1 << 10)  # = 0x07E0
+
+    def test_c_output_deterministic(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = os.path.join(d, 't.svg')
+            open(p, 'w').write(SVG)
+            outs = []
+            for n in (1, 2):
+                o = os.path.join(d, str(n))
+                self.assertEqual(svg_to_gba.main([p, o, '--width', '32', '--name', 'tst']), 0)
+                outs.append(open(os.path.join(o, 'tst.c')).read() + open(os.path.join(o, 'tst.h')).read())
+        self.assertEqual(outs[0], outs[1])
+        self.assertIn('TST_FRONT = 2,', outs[0])
+        self.assertIn('const u16 tst_pal[3]', outs[0])
+        self.assertIn('0x0000, 0x001F, 0x07E0', outs[0])
+
+    def test_rejects_too_many_tiles_and_invisible_parts(self):
+        from PIL import Image
+        noisy = Image.new('L', (256, 256))
+        rng = random.Random(1)  # 1024 distinct random tiles
+        noisy.putdata([rng.randrange(256) for _ in range(256 * 256)])
+        with self.assertRaises(ValueError):
+            svg_to_gba.tiles_and_map(noisy)
+        tiny = SVG.replace('</svg>', '<rect id="dot" class="a" x="1" y="1" width="0.1" height="0.1"/></svg>')
+        with self.assertRaises(ValueError):
+            svg_to_gba.label_map(tiny, 32)
+
+    def test_real_drawing_fits(self):
+        svg = open(os.path.join(ROOT, 'assets', 'controller.svg')).read()
+        labels, parts = svg_to_gba.label_map(svg, 216)
+        tiles, _ = svg_to_gba.tiles_and_map(labels)
+        self.assertLessEqual(len(tiles), svg_to_gba.MAX_TILES)
+        self.assertEqual(len(parts), 24)
+        # every part is visible (none fully hidden under a later one)
+        self.assertEqual(set(labels.getdata()), set(range(len(parts) + 1)))
 
 
 if __name__ == '__main__':
