@@ -18,8 +18,8 @@ make                 # ROM for v1.1a carts -> build/wgc-gba-tx-ui.gba   (PROTOCO
 make test            # headless mGBA: compare cart writes with the stock ROM recordings
 make run             # open in mgba-qt
 make unit            # host unit tests of src/core, both protocols
-make coverage        # unit + gcovr gate (lines >= 95%, branches >= 90%), report in build/coverage.html
-make visual          # golden-image tests (pixel-exact); make visual-approve after looking at changes
+make coverage        # unit + gcovr gate (100% lines and branches), report in build/coverage.html
+make visual          # golden-image tests (pixel-exact); make visual-approve SCREEN=a,b after looking
 make mutate          # mutation testing on the real ARM build (slow)
 make lint            # gcc -fanalyzer + clang-tidy + cppcheck
 make check           # format-check + lint + coverage + protocol/timing + visual (CI + pre-push hook)
@@ -52,33 +52,26 @@ GitHub at pinned commits by `scripts/fetch_deps.sh`.
 | `tools/gba_front_labels.py` | Old DXF route to the drawing, kept for reference only (the DXF's origin is unknown; superseded by `gen_controller_svg.py`) |
 | `tools/ppm2png.py` | Converts harness frames to scaled PNGs (no dependencies) |
 
-## Where things stand (2026-11-14)
-- [x] Hardware identified: MX29LV320 flash, MAX V 5M40Z CPLD, ATtiny48/88, nRF24L01+; receiver is ATtiny841 + V-USB.
-- [x] Stock ROM protocol recovered for both versions (sync, GB mode, config, 12-bit key word, hidden L+R+A/B → X/Y in v1.1b).
-- [x] Find out which version is on my cart: **v1.1a** (pre-2022 hardware, 7-bit protocol, sync `0x49`).
-  - Decision: **don't flash stock v1.1b onto it.** The v1.1a ATtiny waits for sync `0x49` (`while (byteRead != 0x49)`,
-    blog Part 6). v1.1b sends `0x29`, so the cart would never sync, and its 6/6 key split would decode wrongly anyway.
-    The new ROM is written from scratch on the **v1.1a protocol**. Protocol constants sit behind a build flag so a
-    v1.1b cart works too. X/Y (L+R+A/B) gets ported in as an **experiment**: bits 10/11 fit in the 7-bit high half,
-    but nobody knows yet whether the v1.1a ATtiny forwards them.
-- [ ] **Buy a GBxCart RW now** (owner agreed after Gemini review F6), then **Phase 0.5** hardware validation
-      before Phase 1 (SPEC.md §2): dump and verify stock, flash Phase 0, mid-session GB-mode probe.
-- [ ] Check the receiver on the Pi: `lsusb | grep -i 16c0:27dc`, `jstest /dev/input/js0`.
-- [ ] Toolchain: devkitPro's servers block this network (Cloudflare 403), so no devkitPro installer
-      and no Docker. Ubuntu `gcc-arm-none-eabi` + newlib, with libtonc (MIT), devkitPro's GBA crt0 and
-      linker script (MPL-2.0) and gbafix (GPL-3.0, build tool only) built from GitHub at pinned commits:
-      libtonc `c5af1b2`, devkitarm-crtls `1c0c102`, gba-tools `054d507`. Proven 2026-11-14: a test ROM
-      booted in mGBA and wrote the `0x49` sync byte. Glue needed: define `fake_heap_end`, link GCC's
-      `crti/crtbegin/crtend/crtn`, and skip libtonc's `tte_iohook.c`. 
-- [x] Toolchain installed (Ubuntu packages, see Build).
-- [x] **Phase 0 done (2026-11-14):** `make && make test` builds `build/wgc-gba-tx-ui.gba` (12 KB vs
-      stock 78 KB). It reproduces the stock v1.1a cart byte stream in all 6 recorded scenarios
-      (sync, GB mode, pairing, screen off/black, all key combos), at about 2.0 ms per key word.
-      A v1.1b build correctly fails the v1.1a baselines. The cart write + delay is a bus-faithful
-      copy of the stock instruction sequence (`src/link_write.s`).
-- [ ] Phase 0.5: hardware validation (needs GBxCart RW).
-- [ ] Phase 1: CAD-based controller view, LED status and LCD notes, splash, Settings basics.
-- [ ] New UI.
+## Where things stand (parked 2026-11-15)
+
+**Phase 1 is complete in the emulator** and pushed: the live controller view (CAD-traced, buttons lit,
+release fade), status LED and LCD notes (GB mode note and strike), boot splash, Settings (hold L+R+Select
+1 s, or Start at boot) with the zoom into the drawn LCD and the PAIRING / DISPLAY / INPUT / ABOUT pages,
+display options, idle dim and sleep. Every chunk was reviewed by Gemini and mutation-tested.
+
+- **Proven in mGBA:** cart writes and timing match the stock ROM byte for byte (14 scenarios x 2
+  protocols, send gap 2.00 ms, press-to-send <= 2 ms, with the UI busy); 77 pixel-exact screenshots per
+  protocol; unit tests at 100% line and branch coverage; mutation-tested.
+- **Not proven yet:** anything on the real cart. Next milestone: **Phase 0.5** with a GBxCart RW v1.4
+  (dump and keep the stock ROM, flash this one, check buttons through the receiver on the Pi).
+- **Backlog:** every remaining phase and follow-up is a GitHub issue; `scripts/create_issues.sh` creates
+  them (needs `gh`: `sudo apt install gh && gh auth login`, then `bash scripts/create_issues.sh`).
+- **Screenshots:** `tools/shots.py` and the runbook in `.claude/skills/screenshots/SKILL.md` (recipes
+  for every screen, comparing with mockups, golden-approval rules).
+
+History: Phase 0 (protocol core, 2026-11-14) reproduced the stock v1.1a byte stream in all recorded
+scenarios; the toolchain is Ubuntu `gcc-arm-none-eabi` + newlib with libtonc, devkitPro's crt0 and
+linker script, and gbafix built from GitHub at pinned commits (devkitPro's servers block this network).
 
 ## The current UI (stock)
 A libgba text console on a dark grey background: the "insideGadgets" title, a version line, and a
