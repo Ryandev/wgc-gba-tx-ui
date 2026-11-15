@@ -1,6 +1,32 @@
 # wgc-gba-tx-ui
 
-Unofficial replacement on-screen UI for the insideGadgets Wireless Gameboy Controller GBA TX cart.
+**A prettier screen for the insideGadgets Wireless Gameboy Controller.** The GBA TX cart turns a Game
+Boy Advance into a wireless pad, but its screen is a plain text console. This replacement ROM shows a
+live drawing of the console you're holding, with every button lighting up as you press it, a status
+light that tells the truth about the link, and a proper Settings menu, while adding **no input
+latency**. Unofficial; free and open source.
+
+<p align="center"><img src="docs/images/demo.gif" alt="Boot splash, buttons lighting up, Settings zooming into the drawn screen and back" width="480"></p>
+
+| | |
+|:---:|:---:|
+| <img src="docs/images/splash.png" width="360"><br>**Boot splash**: keys are live from the first frame; any press skips it | <img src="docs/images/buttons.png" width="360"><br>**Live view**: every button lights as it's sent, then fades |
+| <img src="docs/images/gb_mode.png" width="360"><br>**Honest status**: GB mode says L/R aren't sent; the LED is amber | <img src="docs/images/zoom.png" width="360"><br>**Settings**: hold L+R+Select and it zooms into the drawn screen |
+| <img src="docs/images/settings_home.png" width="360"><br>**Settings home**: input to the game pauses while it's open | <img src="docs/images/settings_display.png" width="360"><br>**Display**: idle dim and sleep, screen off or black, notes |
+| <img src="docs/images/settings_pairing.png" width="360"><br>**Pairing**: the same bytes as the stock ROM, nicer to set | <img src="docs/images/settings_about.png" width="360"><br>**About**: free and open source |
+
+Every picture here is a **pixel-exact test**: the goldens in `tests/visual/golden/` are checked on each
+push (regenerate these with `python3 tools/readme_images.py`). The drawing is traced from a 1:1 CAD
+model of the console, rendered in the Press Start 2P font.
+
+**What it does:** live controller view · status LED (green sending, amber caveat, red not sending) and
+timed notes on the drawn screen · boot splash · Settings (hold L+R+Select for 1 s, or Start at boot) with
+pairing, display options and GB mode · idle dim and sleep (any key wakes it and is still sent) · the
+stock boot holds still work. **What it doesn't change:** the wireless protocol. The cart sees the same
+bytes as with the stock ROM, every 2 ms, whatever is on screen (checked by the test suite against
+recordings of the stock ROMs). **Status:** complete in the emulator; not yet tested on a real cart (see
+*Where things stand*).
+
 Repo: https://github.com/Ryandev/wgc-gba-tx-ui
 
 ## Controller: wireless GBA pad for the giant GBA
@@ -63,6 +89,8 @@ GitHub at pinned commits by `scripts/fetch_deps.sh`.
 | `tools/svg_to_gba.py` | `controller.svg` → 8bpp affine background for the ROM (tiles, 32x32 map, one palette entry per part so a button lights with one palette write); built into `build/gen/` |
 | `assets/fonts/` | Press Start 2P (SIL OFL 1.1, `OFL.txt`); `tools/ttf_to_tfont.py` turns it into the ROM's 8x8 glyphs at build time (`make tools-test` tests it) |
 | `tools/gba_front_labels.py` | Old DXF route to the drawing, kept for reference only (the DXF's origin is unknown; superseded by `gen_controller_svg.py`) |
+| `docs/images/`, `tools/readme_images.py` | The README's pictures: golden screenshots at 3x and an animated demo recorded in the emulator (re-run the tool when goldens change) |
+| `tools/shots.py` | Screenshots on demand: captures, contact sheet, side by side with a mockup (runbook: `.claude/skills/screenshots/SKILL.md`) |
 | `tools/ppm2png.py` | Converts harness frames to scaled PNGs (no dependencies) |
 
 ## Where things stand (parked 2026-11-15)
