@@ -58,6 +58,21 @@ void lcd_text(uint32_t canvas[LCD_WORDS], lcd_area area, const lcd_font *font, c
     }
 }
 
+void lcd_antenna(uint32_t canvas[LCD_WORDS], int cx, int cy, unsigned ink)
+{
+    // The approved mockup's icon (mockups/30_splash_3_title_v2.png, rows 43..60, columns 112..129),
+    // pixel for pixel: 18 x 18, bit i of a row = column i. Its mast is columns 8-9 from row 11 down;
+    // the 4 x 3 tip is rows 8..10. (Recomputing Pillow's arc maths gave 1-pixel differences.)
+    static const uint32_t icon[18] = {0x00FC0, 0x03030, 0x0C00C, 0x10002, 0x10782, 0x21861,
+                                      0x22011, 0x04008, 0x00780, 0x00780, 0x00780, 0x00300,
+                                      0x00300, 0x00300, 0x00300, 0x00300, 0x00300, 0x00300};
+    for (int y = 0; y < 18; y++) {
+        for (int x = 0; x < 18; x++) {
+            if (icon[y] & (1u << x)) lcd_pixel(canvas, cx - 8 + x, cy - 9 + y, ink);
+        }
+    }
+}
+
 void lcd_bar(uint32_t canvas[LCD_WORDS], lcd_area area, unsigned remaining, unsigned total, unsigned ink)
 {
     const int full = area.w - 8;

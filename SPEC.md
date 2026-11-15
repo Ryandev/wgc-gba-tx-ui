@@ -104,6 +104,11 @@ Original notes:
   giant GBA shell. Proposed palettes are in `mockups/`.
 - *Accept:* the splash never delays the first packet (check the cart-write log: sync arrives within
   the first frames).
+- **Built (Phase 1 chunk 3):** `src/core/splash.c` (phases, skip on a new press only, fade weight),
+  drawn by `screen_main.c`: the fade is palette-only (every colour mixed towards the background), the
+  title and tip are LCD pages on the note canvas, and the antenna is the mockup's icon pixel for pixel.
+  Timings: fade 0.6 s, power-on 0.4 s, title 1 s, tip 1 s. A key held at boot (GB mode's A) doesn't
+  skip it. The tip names the in-session Settings combo, which arrives in chunk 4.
 
 ### C. Status: power LED plus LCD notes (Phase 1, revised 2026-11-14)
 The drawn GBA's **power LED is the status light**, and **notes appear as multi-line text on the

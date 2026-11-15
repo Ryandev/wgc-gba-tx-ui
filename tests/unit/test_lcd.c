@@ -273,6 +273,35 @@ static void test_glyph_spill_keeps_neighbours(void)
     TEST_ASSERT_EQUAL(64 + 3, ink_count());
 }
 
+static void test_antenna(void)
+{
+    // the mockup's icon placed with its mast at (50, 20): mast columns 50-51 down to row 28, tip 49..52
+    // on rows 19..21, outer arc's top row 11 (cx - 2 .. cx + 3), inner arc's top row 15
+    lcd_clear(canvas);
+    guard_set();
+    lcd_antenna(canvas, 50, 20, 1);
+    for (int y = 22; y < 29; y++) {
+        TEST_ASSERT_EQUAL(1, px(50, y));
+        TEST_ASSERT_EQUAL(1, px(51, y));
+        TEST_ASSERT_EQUAL(0, px(49, y));
+    }
+    TEST_ASSERT_EQUAL(0, px(50, 29));
+    TEST_ASSERT_EQUAL(1, px(49, 19));
+    TEST_ASSERT_EQUAL(1, px(52, 21));
+    TEST_ASSERT_EQUAL(0, px(53, 20));
+    for (int x = 48; x <= 53; x++) TEST_ASSERT_EQUAL(1, px(x, 11)); // outer arc top
+    TEST_ASSERT_EQUAL(0, px(47, 11));
+    TEST_ASSERT_EQUAL(0, px(50, 10));                               // nothing above it
+    for (int x = 49; x <= 52; x++) TEST_ASSERT_EQUAL(1, px(x, 15)); // inner arc top
+    TEST_ASSERT_EQUAL(1, px(42, 16));                               // outer arc's lowest points, both sides
+    TEST_ASSERT_EQUAL(1, px(59, 16));
+    // symmetric about the mast (between columns 50 and 51)
+    for (int y = 10; y < 30; y++)
+        for (int d = 0; d < 10; d++) TEST_ASSERT_EQUAL(px(50 - d, y), px(51 + d, y));
+    TEST_ASSERT_EQUAL(60, ink_count()); // lit pixels in the mockup's icon (counted from the PNG)
+    guard_check();
+}
+
 static void test_glyph_leaves_unlit_pixels_alone(void)
 {
     // '!' lights only its top-left pixel (45, 28): the pixel next to it keeps what was there
@@ -302,6 +331,7 @@ int main(void)
     RUN_TEST(test_glyph_aligned_to_a_tile);
     RUN_TEST(test_glyph_spill_into_the_last_column);
     RUN_TEST(test_glyph_spill_keeps_neighbours);
+    RUN_TEST(test_antenna);
     RUN_TEST(test_glyph_leaves_unlit_pixels_alone);
     return UNITY_END();
 }

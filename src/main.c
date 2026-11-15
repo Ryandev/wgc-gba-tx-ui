@@ -7,12 +7,12 @@
 #include "link.h"
 #include "protocol.h"
 #include "screen_main.h"
+#include "version.h"
 #include "core/boot.h"
 #include "core/keyword.h"
 #include "core/pairing.h"
 #include "core/text.h"
 
-#define VERSION        "0.1.0"
 #define TEXT_COLS      30        // 240 px / 8 px font
 #define SBB_TEXT       31        // screenblock holding the text map
 #define SBB_ENTRIES    (32 * 32) // halfwords in one screenblock
@@ -110,11 +110,12 @@ int main(void)
         REG_DISPCNT = DCNT_MODE0;       // screen "off": plain backdrop, nothing drawn
     } else if (plan.settings) {
         text_init();
-        at(0, "WGC-GBA-TX-UI " VERSION);
+        at(0, "WGC-GBA-TX-UI " WGC_VERSION);
         at(1, "PROTOCOL " PROTO_NAME);
         pairing_menu(); // never returns
     } else {
-        screen_main_init(&screen, plan.gb_mode, HELD_WARN_FRAMES); // bulk VRAM load, before key traffic
+        // bulk VRAM load before key traffic; the splash then runs while keys are already sent (SPEC §B)
+        screen_main_init(&screen, plan.gb_mode, HELD_WARN_FRAMES, true, kw_pack(pressed_now(), link_xy));
     }
 
     link_sync();

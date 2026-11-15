@@ -18,7 +18,11 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 SCREENS = {
     # boot frames: 1-7 are white in stock too (crt0, forced blank); frame 8 must already be the whole,
     # correct picture, never garbage backdrop or a torn image (review phase1-chunk1 F1)
-    'boot':    ['f:7', 'p:frame7', 'f:1', 'p:frame8', 'f:22', 'p:idle'],
+    'boot':    ['f:7', 'p:frame7', 'f:1', 'p:frame8', 'f:22', 'p:splash_fade', 'f:20', 'p:splash_power',
+                'f:40', 'p:splash_title', 'f:60', 'p:splash_tip', 'f:60', 'p:idle'],
+    # boot splash (SPEC §B): frame 8 = its first, blank frame; fade, power-on, title, tip, then the main
+    # screen. Any NEW key press skips it at once (and the press still lights, and is sent).
+    'splash_skip': ['f:20', 'k:B', 'f:2', 'p:b_skips'],
     # Captures wait 7 frames after a change (> VIEW_FADE_FRAMES = 6), so earlier presses have fully
     # faded and each shot shows only what's held (review phase1-chunk1 F5).
     # each D-pad direction captured on its own (chunk3 F1: a single final shot only checked Right)
@@ -31,7 +35,8 @@ SCREENS = {
                 'k:-', 'f:7', 'p:released'],
     # GB mode: quiet (amber LED only) until L/R; then L/R light amber (pressed but not sent), the other
     # is struck through and the LCD note counts down 3 s from the last L/R press, then all hides
-    'gb_mode': ['k:A', 'f:30', 'k:-', 'f:7', 'p:shown', 'k:l', 'f:7', 'p:l_amber', 'k:r', 'f:7', 'p:r_amber',
+    # (A held at boot doesn't skip the splash: splash_kept is still splash; shown waits for the main screen)
+    'gb_mode': ['k:A', 'f:30', 'k:-', 'f:7', 'p:splash_kept', 'f:180', 'p:shown', 'k:l', 'f:7', 'p:l_amber', 'k:r', 'f:7', 'p:r_amber',
                 'k:-', 'f:3', 'p:r_fading', 'f:4', 'p:faded', 'f:83', 'p:note_half', 'f:88', 'p:note_last',
                 'f:4', 'p:note_gone'],
     # frames counted from the last L/R release (phase1-chunk2 F4): note_half at 90, note_last at 178 (still

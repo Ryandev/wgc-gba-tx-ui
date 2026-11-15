@@ -41,6 +41,10 @@ void lcd_text(uint32_t canvas[LCD_WORDS], lcd_area area, const lcd_font *font, c
 // bar's two rows first, so it can be redrawn each frame.
 void lcd_bar(uint32_t canvas[LCD_WORDS], lcd_area area, unsigned remaining, unsigned total, unsigned ink);
 
+// The splash's antenna icon, pixel for pixel from the approved mockup 30: 18 x 18 px with the 2 px mast
+// at columns cx, cx + 1, its 4 x 3 tip on rows cy - 1 .. cy + 1, arcs above (top row cy - 9).
+void lcd_antenna(uint32_t canvas[LCD_WORDS], int cx, int cy, unsigned ink);
+
 // The canvas tile rows the bar touches: `*first` and how many (1 or 2), so the hardware layer can
 // re-copy exactly those each frame, for any LCD height.
 void lcd_bar_rows(lcd_area area, int *first, int *count);
