@@ -214,6 +214,14 @@ checked straight after init. All fixed with tests; `lcd.c` then 134/134. Two map
 **Phase 1 chunk 3 (2026-11-15):** after the review fixes, 329/330 on the chunk's files; the survivor
 (an empty bar redrawn on a blank title page) is annotated equivalent.
 
+**Phase 1 chunk 4 (2026-11-15):** 517/612 on the first run, and most "survivors" were a runner gap:
+for a core file only its own test ran, so canvas.c's glyph code (tested through test_lcd.c) looked
+untested; `ALSO_TESTED_BY` in tests/mutate.py fixes that. Real gaps then got tests (boot PLAY, 3-digit
+values, a note after Settings, rect edges). Two canvas_rect survivors exposed an undefined shift
+(> 31 bits) that x86 happens to wrap to the right answer, so host tests could never see it; the code
+now takes the offsets from x0 & 7 / x1 & 7. Final: 257/257 on those files. *Accepted:* swapping the
+assumed channel/address/packets (the defaults are all 1).
+
 **Colour-only captures.** A capture named `*_colours` (e.g. `pairing__frame7_colours`) is compared by
 the set of colours it contains, not pixel by pixel. It's for boot transition frames, where the
 scanline at which startup finishes moves with code size, but what matters is that no garbage

@@ -19,16 +19,23 @@ void canvas_pixel(const canvas *c, int x, int y, unsigned ink)
 
 void canvas_rect(const canvas *c, int x0, int y0, int x1, int y1, unsigned ink)
 {
-    if (x0 < 0) x0 = 0;
-    if (y0 < 0) y0 = 0;
+    // clang-format off
+    if (x0 < 0) x0 = 0; // mutate: equivalent[< -> <=, 0 -> 1] (x0 = 0 is clamped to 0 either way)
+    // clang-format on
+    // clang-format off
+    if (y0 < 0) y0 = 0; // mutate: equivalent[< -> <=, 0 -> 1] (y0 = 0 is clamped to 0 either way)
+    // clang-format on
     if (x1 >= c->tw * 8) x1 = c->tw * 8 - 1;
     if (y1 >= c->th * 8) y1 = c->th * 8 - 1;
     const uint32_t fill = (ink & 0xFu) * 0x11111111u;
     for (int y = y0; y <= y1; y++) {
         for (int tx = x0 >> 3; tx <= x1 >> 3; tx++) {
-            // pixels of this tile inside x0..x1, as a mask of nibbles
-            const int a = tx * 8 < x0 ? x0 - tx * 8 : 0;
-            const int b = tx * 8 + 7 > x1 ? x1 - tx * 8 : 7;
+            // pixels a..b of this tile are inside x0..x1 (only the first and last tiles are partial).
+            // Offsets come straight from x0 / x1 (mutation testing, phase1-chunk4: the old
+            // `x0 - tx * 8` form let a mutant shift by more than 31 bits, which is undefined and
+            // happened to give the same answer on the host)
+            const int a = tx == x0 >> 3 ? x0 & 7 : 0;
+            const int b = tx == x1 >> 3 ? x1 & 7 : 7;
             const uint32_t mask = (0xFFFFFFFFu >> (4 * (7 - b))) & (0xFFFFFFFFu << (4 * a));
             const int w = word_at(c, tx * 8, y);
             c->words[w] = (c->words[w] & ~mask) | (fill & mask);

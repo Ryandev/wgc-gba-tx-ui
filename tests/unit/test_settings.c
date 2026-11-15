@@ -95,6 +95,8 @@ static void test_home_navigation_clamps(void)
     TEST_ASSERT_EQUAL(SET_NONE, tap(K_DOWN)); // already at the bottom
     TEST_ASSERT_EQUAL(SET_REDRAW, tap(K_UP));
     TEST_ASSERT_EQUAL(HOME_PAIRING, s.row);
+    TEST_ASSERT_EQUAL(SET_REDRAW, tap(K_UP)); // and on up to the top row
+    TEST_ASSERT_EQUAL(HOME_PLAY, s.row);
 }
 
 static void test_held_direction_moves_once(void)

@@ -61,6 +61,18 @@ SCREENS = {
     'settings_boot': ['k:S', 'f:7', 'p:frame7_colours', 'f:23', 'k:-', 'f:3', 'p:home', 'k:v', 'f:2', 'k:-', 'f:2',
                       'k:A', 'f:2', 'k:-', 'f:3', 'p:pairing', 'k:>', 'f:2', 'k:-', 'f:2', 'k:v', 'f:2', 'k:-', 'f:2',
                       'k:<', 'f:2', 'k:-', 'f:3', 'p:edited', 'k:A', 'f:2', 'k:-', 'f:5', 'p:sent'],
+    # 3-digit values (review phase1-chunk4 F1: the hundreds digit was dropped): hold Right on CHANNEL and
+    # on ADDRESS (auto-repeat) past 100 (v1.1a; v1.1b stops at 63)
+    'settings_3digit': ['k:S', 'f:30', 'k:-', 'f:3', 'k:v', 'f:2', 'k:-', 'f:2', 'k:A', 'f:2', 'k:-', 'f:3',
+                        'k:>', 'f:900', 'k:-', 'f:2', 'k:v', 'f:2', 'k:-', 'f:2', 'k:>', 'f:900', 'k:-', 'f:3', 'p:pairing'],
+    # Boot-time Settings -> PLAY: zoom out to the controller with the LED green (sending), and in-session
+    # Settings then opens as usual (review phase1-chunk4 F2/F3, mutation re-run)
+    'settings_boot_play': ['k:S', 'f:30', 'k:-', 'f:3', 'k:S', 'f:3', 'k:-', 'f:30', 'p:main', 'k:lrs', 'f:61',
+                           'k:-', 'f:25', 'p:in_session'],
+    # GB mode: Settings opened and closed, then L tapped: the GB note shows whole (the LCD layer's map
+    # is intact after the Settings layer was set up) and no note carried over from before Settings
+    'settings_then_note': ['k:A', 'f:30', 'k:-', 'f:200', 'k:lrs', 'f:61', 'k:-', 'f:25', 'p:opened', 'k:B', 'f:3',
+                           'k:-', 'f:30', 'p:closed', 'k:l', 'f:3', 'k:-', 'f:5', 'p:note'],
     # In-session Settings (SPEC §N): hold L+R+Select 1 s; zoom in (LED red from the first frame), the
     # pages, then out again and back to the controller with the LED green
     'settings': ['f:200', 'k:lrs', 'f:61', 'p:zoom_start', 'f:5', 'p:zoom_mid', 'k:-', 'f:20', 'p:home',

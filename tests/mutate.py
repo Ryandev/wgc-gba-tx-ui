@@ -91,11 +91,17 @@ def mutants(path):
                            text=text[:a + m.start()] + new + text[a + m.end():])
 
 
+# Core modules also exercised through another module's tests (phase1-chunk4: canvas.c's glyph code is
+# tested through lcd.c, so running only test_canvas.c left real kills uncounted)
+ALSO_TESTED_BY = {'canvas': ['lcd']}
+
+
 def unit_tests_for(path):
     """Unit tests that exercise a mutated file (all of them for a header)."""
     base = os.path.splitext(os.path.basename(path))[0]
     own = os.path.join('tests', 'unit', f'test_{base}.c')
-    if path.endswith('.c') and os.path.exists(os.path.join(ROOT, own)): return [own]
+    if path.endswith('.c') and os.path.exists(os.path.join(ROOT, own)):
+        return [own] + [os.path.join('tests', 'unit', f'test_{b}.c') for b in ALSO_TESTED_BY.get(base, [])]
     return sorted(os.path.join('tests', 'unit', f) for f in os.listdir(os.path.join(ROOT, 'tests', 'unit'))
                   if f.startswith('test_') and f.endswith('.c'))
 

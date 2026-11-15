@@ -20,14 +20,18 @@
 #define GREY     3
 #define W        (SET_TW * 8)
 #define H        (SET_TH * 8)
-_Static_assert(0x8000 + (TILE_SET + SET_TW * SET_TH) * 32 <= 0xE000, "settings canvas overlaps SBB 28");
+// clang-format off
+_Static_assert(0x8000 + (TILE_SET + SET_TW * SET_TH) * 32 <= 0xE000, "settings canvas overlaps SBB 28"); // mutate: equivalent[<= -> <, + -> -, hex const +1, dec const +1] (compile-time check that stays true)
+// clang-format on
 
 // In EWRAM, in '.noinit' (ld/gba_cart.ld change 2): crt0 already zeroes EWRAM, and clearing this
 // 19 KB again before main() pushed the first frame back by one (boot__frame8 golden). It's cleared
 // before every use anyway.
 static u32 words[SET_TW * SET_TH * 8] __attribute__((section(".noinit")));
 static const canvas cv = {words, SET_TW, SET_TH};
-static u8 assumed[3] = {1, 1, 1};
+// clang-format off
+static u8 assumed[3] = {1, 1, 1}; // mutate: equivalent[dec const +1] (settings_set_assumed() sets them before anything is drawn)
+// clang-format on
 
 static canvas_font font(void)
 {
@@ -38,18 +42,29 @@ static canvas_font font(void)
 
 void settings_set_assumed(u8 channel, u8 address, u8 packets)
 {
-    assumed[0] = channel;
-    assumed[1] = address;
+    // clang-format off
+    assumed[0] = channel; // mutate: accepted[0 -> 1] (the defaults are all 1, so swapping channel/address/packets can't show (pairing bytes: 03_config))
+    // clang-format on
+    // clang-format off
+    assumed[1] = address; // mutate: accepted[dec const +1] (the defaults are all 1, so swapping channel/address/packets can't show (pairing bytes: 03_config))
+    // clang-format on
     assumed[2] = packets;
 }
 
 void settings_layer_init(void)
 {
-    for (int ty = 0; ty < 32; ty++) {
-        for (int tx = 0; tx < 32; tx++) {
-            const int t = tx < SET_TW && ty < SET_TH ? TILE_SET + ty * SET_TW + tx : 0; // tile 0 is blank
-            se_mem[SBB_SET][ty * 32 + tx] = (SCR_ENTRY)(SE_PALBANK(PAL_SET) | t);
-        }
+    // the canvas row by row at the map's top left; the rest of the 32 x 32 map is tile 0 (blank) and
+    // never on screen (scroll 0, 240 x 160)
+    // clang-format off
+    memset16(se_mem[SBB_SET], 0, 32 * 32); // mutate: equivalent[0 -> 1] (only map entries outside the 30 x 20 canvas keep this value: off screen)
+    // clang-format on
+    // clang-format off
+    for (int ty = 0; ty < SET_TH; ty++) { // mutate: equivalent[< -> <=] (the extra map row or column is off screen: BG1 scroll 0, 240 x 160)
+        // clang-format on
+        // clang-format off
+        for (int tx = 0; tx < SET_TW; tx++) // mutate: equivalent[< -> <=] (the extra map row or column is off screen: BG1 scroll 0, 240 x 160)
+            // clang-format on
+            se_mem[SBB_SET][ty * 32 + tx] = (SCR_ENTRY)(SE_PALBANK(PAL_SET) | (TILE_SET + ty * SET_TW + tx));
     }
     pal_bg_bank[PAL_SET][DARK] = RGB15(3, 7, 3);     // #183918, the mockups' ink (= the LCD ink)
     pal_bg_bank[PAL_SET][GREEN] = RGB15(22, 27, 18); // #B5DE94, the LCD green (text on dark bars)
@@ -63,10 +78,14 @@ void settings_layer_init(void)
 static void bars(const canvas_font *f, const char *title, const char *right, const char *foot_l,
                  const char *foot_r)
 {
-    canvas_rect(&cv, 0, 0, W - 1, 11, DARK);
+    // clang-format off
+    canvas_rect(&cv, 0, 0, W - 1, 11, DARK); // mutate: equivalent[- -> +] (canvas_rect clamps to the canvas)
+    // clang-format on
     canvas_text(&cv, f, 6, 2, title, GREEN);
     canvas_text_right(&cv, f, 232, 2, right, GREY);
-    canvas_rect(&cv, 0, 148, W - 1, H - 1, DARK);
+    // clang-format off
+    canvas_rect(&cv, 0, 148, W - 1, H - 1, DARK); // mutate: equivalent[- -> +] (canvas_rect clamps to the canvas)
+    // clang-format on
     canvas_text(&cv, f, 6, 150, foot_l, GREEN);
     canvas_text_right(&cv, f, 232, 150, foot_r, GREEN);
 }
@@ -79,13 +98,6 @@ static void row(const canvas_font *f, int y, const char *label, bool selected)
         canvas_text(&cv, f, 8, y, ">", GREEN);
     }
     canvas_text(&cv, f, 16, y, label, selected ? GREEN : DARK);
-}
-
-static void two_digits(char out[4], u8 v)
-{
-    out[0] = (char)('0' + v / 10 % 10);
-    out[1] = (char)('0' + v % 10);
-    out[2] = '\0';
 }
 
 static void draw_home(const canvas_font *f, const settings_state *s)
@@ -103,11 +115,13 @@ static void draw_pairing(const canvas_font *f, const settings_state *s)
     for (int r = 0; r < PAIR_ROWS; r++) {
         const bool sel = s->boot && r == s->pair.row; // in-session: read-only, no cursor
         row(f, y[r], label[r], sel);
-        char v[4];
+        // clang-format off
+        char v[4]; // mutate: equivalent[dec const +1] (larger buffer)
+        // clang-format on
         if (r == PAIR_PACKETS) {
             fmt_u8(v, s->pair.val[r]);
         } else {
-            two_digits(v, s->pair.val[r]);
+            fmt_pad2(v, s->pair.val[r]); // keeps 3 digits (review phase1-chunk4 F1)
         }
         canvas_text_right(&cv, f, 224, y[r], v, sel ? GREEN : DARK);
         if (sel) {
@@ -117,11 +131,11 @@ static void draw_pairing(const canvas_font *f, const settings_state *s)
     }
     // under the rows: the channel's frequency, 2400 + ch MHz as "2.4CC GHZ" (ch 100..125 -> 2.5CC),
     // and what packets means
-    char mhz[] = "2.4CC GHZ";
-    mhz[2] = (char)('4' + s->pair.val[PAIR_CHANNEL] / 100);
-    mhz[3] = (char)('0' + s->pair.val[PAIR_CHANNEL] / 10 % 10);
-    mhz[4] = (char)('0' + s->pair.val[PAIR_CHANNEL] % 10);
-    canvas_text(&cv, f, 28, 31, mhz, GREY);
+    // clang-format off
+    char ghz[10]; // mutate: equivalent[dec const +1] (larger buffer)
+    // clang-format on
+    fmt_ghz(ghz, s->pair.val[PAIR_CHANNEL]);
+    canvas_text(&cv, f, 28, 31, ghz, GREY);
     canvas_text(&cv, f, 28, 75, "PER 2MS TICK", GREY);
     static const char *const boot_hint[] = {"KEEP CARTS 3+ CHANNELS", "APART. NOTE THESE VALUES",
                                             "TO PAIR MORE RECEIVERS."};
@@ -146,16 +160,22 @@ static void draw_about(const canvas_font *f)
 {
     bars(f, "ABOUT", "", "", "B:BACK");
     // the assumed values with a '*' each: "07*", "01*", "1*"
-    char ch[] = "00*";
-    char ad[] = "00*";
-    char pk[5];
-    two_digits(ch, assumed[0]);
-    ch[2] = '*';
-    two_digits(ad, assumed[1]);
-    ad[2] = '*';
-    const int n = fmt_u8(pk, assumed[2]); // 1..3 digits, NUL-terminated (pk has room for the '*')
-    pk[n] = '*';
-    pk[n + 1] = '\0';
+    // clang-format off
+    char ch[5]; // mutate: equivalent[dec const +1] (larger buffer)
+    // clang-format on
+    // clang-format off
+    char ad[5]; // mutate: equivalent[dec const +1] (larger buffer)
+    // clang-format on
+    // clang-format off
+    char pk[5]; // mutate: equivalent[dec const +1] (larger buffer)
+    // clang-format on
+    // clang-format off
+    fmt_append(ch, fmt_pad2(ch, assumed[0]), '*'); // mutate: accepted[0 -> 1] (the defaults are all 1, so swapping channel/address/packets can't show (pairing bytes: 03_config))
+    // clang-format on
+    // clang-format off
+    fmt_append(ad, fmt_pad2(ad, assumed[1]), '*'); // mutate: accepted[dec const +1] (the defaults are all 1, so swapping channel/address/packets can't show (pairing bytes: 03_config))
+    // clang-format on
+    fmt_append(pk, fmt_u8(pk, assumed[2]), '*');
     static const char rom[] = "V" WGC_VERSION;
     static const char *const label[] = {"ROM", "CART PROTOCOL", "CHANNEL", "ADDRESS", "PACKETS"};
     const char *const value[] = {rom, PROTO_NAME, ch, ad, pk};
@@ -196,9 +216,13 @@ void settings_copy(void) { memcpy32(&tile_mem[CBB_SET][TILE_SET], words, sizeof 
 
 void settings_fade(int level)
 {
-    if (level <= 0) {
+    // clang-format off
+    if (level <= 0) { // mutate: equivalent[<= -> <, 0 -> 1] (the fade steps by 2: at 0 the layer is fully transparent either way; never 1)
+        // clang-format on
         REG_DISPCNT &= (u16)~DCNT_BG1;
-        REG_BLDCNT = 0;
+        // clang-format off
+        REG_BLDCNT = 0; // mutate: equivalent[0 -> 1] (BLDCNT 1 = BG0 as top with no effect selected: nothing blends)
+        // clang-format on
         return;
     }
     // BG1 (the text and bars) over BG2 and the backdrop, `level`/16 opaque

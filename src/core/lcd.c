@@ -58,7 +58,9 @@ void lcd_bar(uint32_t words[LCD_WORDS], lcd_area area, unsigned remaining, unsig
     const int w = total ? (int)((unsigned)full * remaining / total) : 0;
     const canvas c = of(words);
     canvas_rect(&c, 4, y, 4 + full - 1, y + 2, 0); // clear the whole bar, then draw what's left
-    if (w > 0) canvas_rect(&c, 4, y, 4 + w - 1, y + 2, ink);
+    // clang-format off
+    if (w > 0) canvas_rect(&c, 4, y, 4 + w - 1, y + 2, ink); // mutate: equivalent[> -> >=] (w = 0 gives an empty rectangle: nothing drawn)
+    // clang-format on
 }
 
 void lcd_bar_rows(lcd_area area, int *first, int *count)

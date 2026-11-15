@@ -42,9 +42,11 @@ typedef struct {
     int shown;         // LCD page currently rendered (screen_main.c PAGE_*)
     bool show_pending; // rendered while hidden; show it at the next frame's start
     ui_mode mode;
-    int step;          // zoom step (0..ZOOM_FRAMES) or fade level (0..16) in the current mode
-    bool sending;      // key words are going out (false in boot-time Settings until PLAY)
-    bool copy_pending; // the Settings canvas was redrawn: copy it at the next frame's start
+    int step;           // zoom step (0..ZOOM_FRAMES) or fade level (0..16) in the current mode
+    bool sending;       // key words are going out (false in boot-time Settings until PLAY)
+    bool copy_pending;  // the Settings canvas was redrawn: copy it at the next frame's start
+    bool layer_pending; // set up the Settings layer after this frame's palette writes
+    u8 assumed[3];      // the assumed pairing (build-time defaults): in-session Settings shows these
     combo_state combo;
     settings_state set;
 } main_screen;

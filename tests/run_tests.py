@@ -105,6 +105,8 @@ def main():
                 probs.append(f"preamble {fmt(o['pre'])} != {fmt(sc['pre'][ver])}")
         elif o['pre'] != s['pre']:
             probs.append(f"preamble {fmt(o['pre'])} != stock {fmt(s['pre'])}")
+        if sc.get('nothing_before_frame') and o_w and o_w[0][0] < sc['nothing_before_frame']:
+            probs.append(f"boot order: first write at frame {o_w[0][0]} < {sc['nothing_before_frame']} (before PLAY)")
         if sc.get('sync_after_a') and o_w:
             a_press = next((c for _, c, m in o_k if m & 1), None)  # first A press (KEYINPUT bit 0)
             if a_press is None or o_w[0][1] < a_press:

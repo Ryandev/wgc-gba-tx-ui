@@ -9,6 +9,7 @@ void tearDown(void) {}
 #define TW 5
 #define TH 3
 static struct {
+    uint32_t before[8]; // writes before the canvas (an unclamped negative x or y) land here
     uint32_t w[TW * TH * 8];
     uint32_t guard[8];
 } mem;
@@ -31,13 +32,16 @@ static int count(unsigned ink)
 static void fresh(void)
 {
     for (unsigned i = 0; i < sizeof mem.w / sizeof mem.w[0]; i++) mem.w[i] = 0xDEADBEEFu;
-    for (int i = 0; i < 8; i++) mem.guard[i] = 0;
+    for (int i = 0; i < 8; i++) mem.guard[i] = mem.before[i] = 0;
     canvas_clear(&c);
 }
 
 static void guard(void)
 {
-    for (int i = 0; i < 8; i++) TEST_ASSERT_EQUAL_HEX32(0, mem.guard[i]);
+    for (int i = 0; i < 8; i++) {
+        TEST_ASSERT_EQUAL_HEX32(0, mem.guard[i]);
+        TEST_ASSERT_EQUAL_HEX32(0, mem.before[i]);
+    }
 }
 
 // 1bpp font: glyph 0 = 'A', a full block
@@ -66,6 +70,17 @@ static void test_pixel_layout_any_width(void)
     guard();
 }
 
+static void test_pixel_overwrite_keeps_its_neighbours(void)
+{
+    fresh();
+    canvas_pixel(&c, 3, 0, 5);
+    canvas_pixel(&c, 4, 0, 6);
+    canvas_pixel(&c, 3, 0, 2); // replaces only pixel 3
+    TEST_ASSERT_EQUAL(2, px(3, 0));
+    TEST_ASSERT_EQUAL(6, px(4, 0));
+    TEST_ASSERT_EQUAL(1, count(2));
+}
+
 static void test_rect_inside_one_tile(void)
 {
     fresh();
@@ -91,6 +106,19 @@ static void test_rect_across_tiles_and_rows(void)
     TEST_ASSERT_EQUAL(0, px(18, 9));
 }
 
+static void test_rect_starting_inside_a_later_tile(void)
+{
+    // x0 = 10: tile column 1, 2 px in; to x1 = 26: tile 3, 2 px in
+    fresh();
+    canvas_rect(&c, 10, 3, 26, 3, 6);
+    TEST_ASSERT_EQUAL(17, count(6));
+    TEST_ASSERT_EQUAL(0, px(9, 3));
+    TEST_ASSERT_EQUAL(6, px(10, 3));
+    TEST_ASSERT_EQUAL(6, px(15, 3));
+    TEST_ASSERT_EQUAL(6, px(26, 3));
+    TEST_ASSERT_EQUAL(0, px(27, 3));
+}
+
 static void test_rect_keeps_neighbours(void)
 {
     fresh();
@@ -107,6 +135,22 @@ static void test_rect_clipped_and_full(void)
     fresh();
     canvas_rect(&c, -10, -10, 1000, 1000, 1);
     TEST_ASSERT_EQUAL(TW * TH * 64, count(1));
+    guard(); // nothing before or after the canvas
+    fresh();
+    canvas_rect(&c, -3, 2, 5, 2, 4); // clipped on the left: pixels 0..5 only
+    TEST_ASSERT_EQUAL(6, count(4));
+    canvas_rect(&c, 2, -3, 2, 1, 7); // clipped at the top: rows 0..1
+    TEST_ASSERT_EQUAL(2, count(7));
+    canvas_rect(&c, TW * 8 - 2, 5, TW * 8 + 3, 5, 9); // at the right edge: 2 pixels
+    TEST_ASSERT_EQUAL(2, count(9));
+    canvas_rect(&c, 9, TH * 8 - 1, 9, TH * 8 + 4, 8); // at the bottom: 1 pixel
+    TEST_ASSERT_EQUAL(1, count(8));
+    guard();
+    fresh();
+    canvas_rect(&c, 30, 0, TW * 8, 0, 3); // x1 exactly one past the right edge: clamped (10 px)
+    canvas_rect(&c, 0, 20, 0, TH * 8, 5); // y1 exactly one past the bottom: clamped (4 px)
+    TEST_ASSERT_EQUAL(10, count(3));
+    TEST_ASSERT_EQUAL(4, count(5));
     guard();
     canvas_rect(&c, 0, 0, TW * 8 - 1, TH * 8 - 1, 0); // and back
     TEST_ASSERT_EQUAL(TW * TH * 64, count(0));
@@ -139,8 +183,10 @@ int main(void)
     UNITY_BEGIN();
     RUN_TEST(test_clear_whole_canvas_only);
     RUN_TEST(test_pixel_layout_any_width);
+    RUN_TEST(test_pixel_overwrite_keeps_its_neighbours);
     RUN_TEST(test_rect_inside_one_tile);
     RUN_TEST(test_rect_across_tiles_and_rows);
+    RUN_TEST(test_rect_starting_inside_a_later_tile);
     RUN_TEST(test_rect_keeps_neighbours);
     RUN_TEST(test_rect_clipped_and_full);
     RUN_TEST(test_text_left_and_right);

@@ -62,6 +62,24 @@ static void test_scale_grows_every_step(void)
     }
 }
 
+static void test_every_step_exactly(void)
+{
+    // independently computed (Python, same 8.8 formulas) for focus (116, 66) -> (124, 60) px, so x moves
+    // too: ease, pa, x, y for k = 0..12
+    static const int32_t want[ZOOM_FRAMES + 1][4] = {
+        {0, 256, -1024, -3584},  {41, 204, 5544, 330},    {78, 172, 9680, 2668},   {112, 150, 12592, 4224},
+        {142, 135, 14632, 5244}, {169, 124, 16168, 5962}, {192, 116, 17312, 6464}, {212, 110, 18192, 6824},
+        {228, 105, 18920, 7128}, {240, 102, 19376, 7296}, {249, 100, 19688, 7402}, {254, 98, 19968, 7532},
+        {256, 98, 19984, 7520}};
+    for (int k = 0; k <= ZOOM_FRAMES; k++) {
+        TEST_ASSERT_EQUAL_UINT_MESSAGE(want[k][0], zoom_ease(k), "ease");
+        const zoom_params p = zoom_at(k, 116 * 256, 66 * 256, 124 * 256, 60 * 256);
+        TEST_ASSERT_EQUAL_MESSAGE(want[k][1], p.pa, "pa");
+        TEST_ASSERT_EQUAL_MESSAGE(want[k][2], p.x, "x");
+        TEST_ASSERT_EQUAL_MESSAGE(want[k][3], p.y, "y");
+    }
+}
+
 static void test_halfway_numbers(void)
 {
     // k = 6: ease 192 -> scale 256 + 410 * 192 / 256 = 563, pa = 65536 / 563 = 116;
@@ -79,6 +97,7 @@ int main(void)
     RUN_TEST(test_step_0_is_the_normal_view);
     RUN_TEST(test_last_step_fills_the_screen_with_the_lcd);
     RUN_TEST(test_scale_grows_every_step);
+    RUN_TEST(test_every_step_exactly);
     RUN_TEST(test_halfway_numbers);
     return UNITY_END();
 }

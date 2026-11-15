@@ -10,24 +10,27 @@ int fmt_u8(char *out, uint8_t v)
     return n;
 }
 
-void fmt_hex3(char *out, uint16_t v)
+int fmt_pad2(char *out, uint8_t v)
 {
-    static const char h[] = "0123456789ABCDEF";
-    out[0] = h[(v >> 8) & 15u];
-    out[1] = h[(v >> 4) & 15u];
-    out[2] = h[v & 15u];
-    out[3] = 0;
+    if (v >= 10) return fmt_u8(out, v);
+    out[0] = '0';
+    out[1] = (char)('0' + v);
+    out[2] = 0;
+    return 2;
 }
 
-void fmt_menu_row(char *out, size_t cap, const char *label, uint8_t value, int selected)
+void fmt_append(char *out, int n, char c)
 {
-    if (cap == 0) return;
-    char num[4]; // mutate: equivalent[dec const +1] (larger buffer changes nothing)
-    size_t n = 0;
-    const char *parts[3] = {selected ? ">" : " ", label, ": "}; // mutate: equivalent[dec const +1]
-    for (int i = 0; i < 3; i++)
-        for (const char *p = parts[i]; *p && n + 1 < cap; p++) out[n++] = *p;
-    fmt_u8(num, value);
-    for (const char *p = num; *p && n + 1 < cap; p++) out[n++] = *p;
-    out[n] = 0;
+    out[n] = c;
+    out[n + 1] = 0;
+}
+
+void fmt_ghz(char out[10], uint8_t channel)
+{
+    // 2400 + channel MHz as "2.4CC GHZ" (100..125 -> "2.5CC GHZ"; the nRF24 goes up to 2.525 GHz)
+    static const char model[] = "2.4CC GHZ";
+    for (int i = 0; i < 10; i++) out[i] = model[i];
+    out[2] = (char)('4' + channel / 100);
+    out[3] = (char)('0' + channel / 10 % 10);
+    out[4] = (char)('0' + channel % 10);
 }

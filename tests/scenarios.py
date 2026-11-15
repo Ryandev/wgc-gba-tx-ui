@@ -55,6 +55,13 @@ SCENARIOS = {
                           + TAP('A') + TAP('B') + TAP('B') + ['f:30', 'k:^', 'f:5', 'k:-', 'f:5'],
                           expect=[0, 0x304, 0, 0x40, 0], pre={'v1.1a': (0x49,), 'v1.1b': (0x29,)},
                           lat_from_frame=380, note='Settings open: only neutral words; pass-through after'),
+    # Boot-time Settings -> PLAY (SPEC §S, review phase1-chunk4 F2/F3): Start + A held at boot (Settings,
+    # GB mode); nothing is written before PLAY (Start at frame ~50); then sync + GB pair, neutral words
+    # through the fade/zoom out (the held Start isn't sent), then pass-through.
+    '12_boot_play':  dict(ours=['k:SA', 'f:30', 'k:-', 'f:20', 'k:S', 'f:3', 'k:-', 'f:40', 'k:^', 'f:5', 'k:-', 'f:5'],
+                          expect=[0, 0x40, 0], pre={'v1.1a': (0x49, 0x63, 0x5A), 'v1.1b': (0x29, 0x23, 0x1A)},
+                          nothing_before_frame=50, lat_from_frame=90,
+                          note='boot-time Settings: nothing before PLAY, neutral while zooming out'),
     '07_xy':         dict(ours=['f:30', 'k:lrA', 'f:5', 'k:lrB', 'f:5', 'k:lrAB', 'f:5', 'k:-', 'f:5'],
                           note='L+R+A/B -> X/Y on v1.1b; plain L+R+A/B on v1.1a'),
 }

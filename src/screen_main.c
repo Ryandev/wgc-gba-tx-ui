@@ -147,11 +147,23 @@ void screen_main_init(main_screen *m, const screen_main_config *cfg)
     m->show_pending =
         false; // mutate: equivalent[false -> true] (only read once a note is shown, after it's set)
     m->sending = !cfg->boot_settings;
-    m->copy_pending = false;
+    m->layer_pending = false;
+    // clang-format off
+    m->assumed[0] = cfg->channel; // mutate: accepted[0 -> 1] (the defaults are all 1, so swapping channel/address/packets can't show (pairing bytes: 03_config))
+    // clang-format on
+    // clang-format off
+    m->assumed[1] = cfg->address; // mutate: accepted[dec const +1] (the defaults are all 1, so swapping channel/address/packets can't show (pairing bytes: 03_config))
+    // clang-format on
+    m->assumed[2] = cfg->packets;
+    // clang-format off
+    m->copy_pending = false; // mutate: equivalent[false -> true] (a redundant copy of the same canvas)
+    // clang-format on
     m->mode = cfg->boot_settings ? UI_FADE_IN : UI_MAIN;
     m->step = 0;
     memcpy32(&tile8_mem[CBB_CTRL][0], ctrl_tiles, sizeof ctrl_tiles / 4);
-    memcpy32(se_mem[SBB_CTRL], ctrl_map, sizeof ctrl_map / 4);
+    // clang-format off
+    memcpy32(se_mem[SBB_CTRL], ctrl_map, sizeof ctrl_map / 4); // mutate: equivalent[dec const +1] (map rows >= 26 are never on screen, at 1:1 or zoomed into the LCD)
+    // clang-format on
     memcpy16(pal_bg_mem, ctrl_pal, CTRL_PAL_LEN);
     pal_bg_mem[0] = BACKDROP;
     REG_BG2CNT = BG_CBB(CBB_CTRL) | BG_SBB(SBB_CTRL) | BG_AFF_32x32 |
@@ -273,11 +285,17 @@ static ui_event settings_modes(main_screen *m, u16 keys)
     case UI_SETTINGS:
         if (m->copy_pending) { // redrawn last frame: copy now, at the start of VBlank
             settings_copy();
-            m->copy_pending = false;
+            // clang-format off
+            m->copy_pending = false; // mutate: equivalent[false -> true] (copying the unchanged canvas again each frame shows the same)
+            // clang-format on
         }
         switch (settings_step(&m->set, keys)) {
         case SET_PLAY:
-            if (!m->sending) { // boot-time Settings: the link starts now (sync first, SPEC §S)
+            if (!m->sending) {
+                // boot-time Settings: the link starts now (sync first, SPEC §S), paused like in-session
+                // Settings until the zoom out ends, so the held A/Start and anything pressed during
+                // the exit isn't sent (review phase1-chunk4 F2)
+                link_paused = true;
                 ev = UI_EV_START_LINK;
                 m->sending = true;
             }
@@ -300,7 +318,9 @@ static ui_event settings_modes(main_screen *m, u16 keys)
     case UI_FADE_OUT:
         m->step -= FADE_STEP;
         settings_fade(m->step);
-        if (m->step <= 0) {
+        // clang-format off
+        if (m->step <= 0) { // mutate: equivalent[0 -> 1] (the fade steps by 2 from 16: it reaches 0, never 1)
+            // clang-format on
             m->mode = UI_ZOOM_OUT;
             m->step = ZOOM_FRAMES;
         }
@@ -332,28 +352,38 @@ ui_event screen_main_frame(main_screen *m, u16 word, u16 keys)
     view_step(&m->view, shown_word);
     notes_step(&m->notes, shown_word);
 
-    // 1. Palette writes (we're at the start of VBlank)
+    // 1. Mode changes first, so this frame's palette (the LED) matches them (review phase1-chunk4
+    // F4). In-session Settings: hold L + R + Select for 1 s (SPEC §N); from the frame it fires the
+    // cart sends neutral, the LED turns red and the zoom starts.
+    ui_event ev = UI_EV_NONE;
+    if (m->mode == UI_MAIN) {
+        if (m->sending && !m->splash_on && combo_step(&m->combo, keys)) {
+            link_paused = true;
+            m->layer_pending = true; // after the palette writes (it's a 1 KB map fill)
+            // clang-format off
+            settings_init(&m->set, false, m->assumed[0], m->assumed[1], m->assumed[2], keys); // mutate: accepted[0 -> 1, dec const +1] (the defaults are all 1, so swapping channel/address/packets can't show (pairing bytes: 03_config))
+            // clang-format on
+            // no GB note, strike or held-key state carries into or out of Settings (F5)
+            notes_init(&m->notes, m->notes.gb_mode, m->notes.held_limit);
+            m->mode = UI_ZOOM_IN;
+            m->step = 0;
+        }
+    } else {
+        ev = settings_modes(m, keys);
+    }
+
+    // 2. Palette writes (still early in VBlank)
     if (sp == SPLASH_FADE) {
         palette_faded(splash_fade_weight(&m->splash));
         m->faded = true;
     } else {
         palette_main(m, sp);
     }
-
-    // 2. In-session Settings: hold L + R + Select for 1 s (SPEC §N). From the frame it fires the
-    // cart sends neutral (the LED turns red), and the zoom starts.
-    ui_event ev = UI_EV_NONE;
-    if (m->mode == UI_MAIN) {
-        if (m->sending && !m->splash_on && combo_step(&m->combo, keys)) {
-            link_paused = true;
-            settings_layer_init(); // main loop work (the send IRQ preempts it); the layer stays hidden
-            settings_init(&m->set, false, m->set.pair.val[PAIR_CHANNEL], m->set.pair.val[PAIR_ADDRESS],
-                          m->set.pair.val[PAIR_PACKETS], keys);
-            m->mode = UI_ZOOM_IN;
-            m->step = 0;
-        }
-    } else {
-        ev = settings_modes(m, keys);
+    if (m->layer_pending) {
+        settings_layer_init(); // main loop work (the send IRQ preempts it); the layer stays hidden
+        // clang-format off
+        m->layer_pending = false; // mutate: equivalent[false -> true] (setting up the hidden layer again each frame changes nothing on screen)
+        // clang-format on
     }
 
     // 3. The LCD notes layer

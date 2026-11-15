@@ -20,48 +20,49 @@ static void test_fmt_u8(void)
     TEST_ASSERT_EQUAL_STRING("99", b);
 }
 
-static void test_fmt_hex3(void)
+static void test_fmt_pad2(void)
 {
-    char b[8];
-    memset(b, 'x', sizeof b); // sentinel: the terminator must be written, not found by luck
-    fmt_hex3(b, 0x301);
-    TEST_ASSERT_EQUAL_STRING("301", b);
-    fmt_hex3(b, 0xFABC); // only the low 12 bits
-    TEST_ASSERT_EQUAL_STRING("ABC", b);
-    TEST_ASSERT_EQUAL_CHAR('\0', b[3]);
-    TEST_ASSERT_EQUAL_CHAR('x', b[4]); // and nothing past it
+    const struct {
+        const char *want;
+        int n;
+        uint8_t v;
+    } cases[] = {{"00", 2, 0},  {"01", 2, 1},    {"09", 2, 9},    {"10", 2, 10},  {"42", 2, 42},
+                 {"99", 2, 99}, {"100", 3, 100}, {"101", 3, 101}, {"254", 3, 254}};
+    for (unsigned i = 0; i < sizeof cases / sizeof cases[0]; i++) {
+        char out[4] = {'x', 'x', 'x', 'x'};
+        TEST_ASSERT_EQUAL(cases[i].n, fmt_pad2(out, cases[i].v));
+        TEST_ASSERT_EQUAL_STRING(cases[i].want, out);
+    }
 }
 
-static void test_menu_row(void)
+static void test_fmt_append(void)
 {
-    char b[32];
-    fmt_menu_row(b, sizeof b, "RF CHANNEL", 7, 1);
-    TEST_ASSERT_EQUAL_STRING(">RF CHANNEL: 7", b);
-    fmt_menu_row(b, sizeof b, "RF ADDRESS", 254, 0);
-    TEST_ASSERT_EQUAL_STRING(" RF ADDRESS: 254", b);
+    char out[5] = {'0', '7', 0, 'x', 'x'};
+    fmt_append(out, 2, '*');
+    TEST_ASSERT_EQUAL_STRING("07*", out);
+    TEST_ASSERT_EQUAL('x', out[4]); // only n and n + 1 are written
 }
 
-static void test_menu_row_truncates_safely(void)
+static void test_fmt_ghz(void)
 {
-    char b[8];
-    memset(b, 'x', sizeof b);
-    fmt_menu_row(b, sizeof b, "RF CHANNEL", 7, 1);
-    TEST_ASSERT_EQUAL_STRING(">RF CHA", b); // 7 chars + NUL
-    fmt_menu_row(b, 7, "X", 255, 1);        // cap 7 = 6 chars + NUL: the number fits exactly
-    TEST_ASSERT_EQUAL_STRING(">X: 25", b);
-    fmt_menu_row(b, 1, "X", 1, 0);
-    TEST_ASSERT_EQUAL_STRING("", b);
-    b[0] = 'q';
-    fmt_menu_row(b, 0, "X", 1, 0); // cap 0: writes nothing
-    TEST_ASSERT_EQUAL_CHAR('q', b[0]);
+    const struct {
+        uint8_t ch;
+        const char *want;
+    } cases[] = {{0, "2.400 GHZ"},  {1, "2.401 GHZ"},   {7, "2.407 GHZ"},  {42, "2.442 GHZ"},
+                 {99, "2.499 GHZ"}, {100, "2.500 GHZ"}, {125, "2.525 GHZ"}};
+    for (unsigned i = 0; i < sizeof cases / sizeof cases[0]; i++) {
+        char out[10];
+        fmt_ghz(out, cases[i].ch);
+        TEST_ASSERT_EQUAL_STRING(cases[i].want, out);
+    }
 }
 
 int main(void)
 {
     UNITY_BEGIN();
     RUN_TEST(test_fmt_u8);
-    RUN_TEST(test_fmt_hex3);
-    RUN_TEST(test_menu_row);
-    RUN_TEST(test_menu_row_truncates_safely);
+    RUN_TEST(test_fmt_pad2);
+    RUN_TEST(test_fmt_append);
+    RUN_TEST(test_fmt_ghz);
     return UNITY_END();
 }
