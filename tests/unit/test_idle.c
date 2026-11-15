@@ -66,6 +66,11 @@ static void test_any_key_wakes_at_once(void)
         quiet(9000);
         idle_step(&s, keys[k]);
         TEST_ASSERT_EQUAL_UINT(256, idle_brightness(&s, 1800, 7200));
+        TEST_ASSERT_EQUAL_UINT32(0, s.quiet); // the full delay again from here (review phase1-chunk5 F5)
+        quiet(1800);
+        TEST_ASSERT_EQUAL_UINT(256, idle_brightness(&s, 1800, 7200)); // only starting to fade
+        quiet(1);
+        TEST_ASSERT_TRUE(idle_brightness(&s, 1800, 7200) < 256);
     }
 }
 

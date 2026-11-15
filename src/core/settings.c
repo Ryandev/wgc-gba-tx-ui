@@ -41,8 +41,17 @@ void settings_opts_default(settings_opts *o)
 
 int settings_opt_count(int row)
 {
-    static const int count[DISPLAY_ROWS] = {5, 5, 3, 2};
-    return row >= 0 && row < DISPLAY_ROWS ? count[row] : 0;
+    switch (row) { // no table to read past (mutation testing: a `<=` read one entry beyond it unseen)
+    case OPT_DIM:
+    case OPT_SLEEP:
+        return 5;
+    case OPT_SCREEN:
+        return 3;
+    case OPT_NOTES:
+        return 2;
+    default:
+        return 0;
+    }
 }
 
 const char *settings_opt_text(int row, uint8_t value)

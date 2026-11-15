@@ -283,6 +283,12 @@ static void test_display_page_rows_and_values(void)
     TEST_ASSERT_EQUAL(SET_NONE, tap(K_LEFT)); // OFF is the first: clamps
     TEST_ASSERT_EQUAL(SET_REDRAW, tap(K_UP));
     TEST_ASSERT_EQUAL(OPT_SCREEN, s.sub);
+    TEST_ASSERT_EQUAL(SET_REDRAW, tap(K_UP)); // and on up to the first row (review phase1-chunk5 F5)
+    TEST_ASSERT_EQUAL(SET_REDRAW, tap(K_UP));
+    TEST_ASSERT_EQUAL(OPT_DIM, s.sub);
+    TEST_ASSERT_EQUAL(SET_NONE, tap(K_UP));
+    tap(K_DOWN);
+    tap(K_DOWN);
     TEST_ASSERT_EQUAL(SET_REDRAW, tap(K_RIGHT));
     TEST_ASSERT_EQUAL(SCREEN_OFF_GREY, s.opts.val[OPT_SCREEN]);
     TEST_ASSERT_EQUAL(SET_NONE, tap(K_A)); // nothing to open

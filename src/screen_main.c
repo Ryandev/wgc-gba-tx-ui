@@ -33,7 +33,9 @@ _Static_assert(CTRL_LCD_X1 - CTRL_LCD_X0 + 1 <= LCD_TW * 8, "LCD canvas too narr
 _Static_assert(CTRL_LCD_Y1 - CTRL_LCD_Y0 + 1 <= LCD_TH * 8, "LCD canvas too short"); // mutate: equivalent[+ -> -, dec const +1] (compile-time check that stays true)
 // clang-format on
 
-static u32 lcd_words[LCD_WORDS]; // rendered here, then copied to VRAM
+// rendered here, then copied to VRAM; in EWRAM .noinit (cleared before every use): in .bss, crt0's clear
+// pushed the first frame back by one (review phase1-chunk5 F1, boot__frame8)
+static u32 lcd_words[LCD_WORDS] __attribute__((section(".noinit")));
 
 // Palette entries (fill, highlight, shadow) of each button, in view_button order
 // clang-format off
@@ -164,6 +166,7 @@ void screen_main_init(main_screen *m, const screen_main_config *cfg)
     m->assumed[2] = cfg->packets;
     // clang-format off
     m->copy_pending = false; // mutate: equivalent[false -> true] (a redundant copy of the same canvas)
+    m->draw_pending = false;
     // clang-format on
     m->mode = cfg->boot_settings ? UI_FADE_IN : UI_MAIN;
     m->step = 0;
@@ -206,7 +209,8 @@ static void palette_faded(unsigned weight)
     }
 }
 
-static u16 shadow[CTRL_PAL_LEN]; // this frame's colours, before the idle dim
+static u16 shadow[CTRL_PAL_LEN]
+    __attribute__((section(".noinit"))); // this frame's colours (filled each frame)
 
 // Main-screen palette: buttons, the splash's hints, strike lines and the LED (SPEC §A, §B, §C), built in
 // a shadow copy and written out through the idle brightness (SPEC §K: dim fades towards black, 0 =
@@ -246,11 +250,24 @@ static void palette_main(main_screen *m, splash_phase sp, unsigned brightness)
     shadow[CTRL_LED_GLOW1] = led[1];
     shadow[CTRL_LED_GLOW2] = led[2];
 
-    static const u16 backdrop[3] = {
-        [SCREEN_ON] = BACKDROP, [SCREEN_OFF_GREY] = OFF_GREY, [SCREEN_OFF_BLACK] = 0};
-    shadow[0] = backdrop[m->opts.val[OPT_SCREEN]];
+    // clang-format off
+    static const u16 backdrop[3] = { // mutate: equivalent[dec const +1] (larger array)
+                               // clang-format on
+                               [SCREEN_ON] = BACKDROP,
+                               [SCREEN_OFF_GREY] = OFF_GREY,
+                               [SCREEN_OFF_BLACK] = 0};
+    // SCREEN OFF/BLACK only on the main screen: Settings zooms over the usual background (F3)
+    shadow[0] = m->mode == UI_MAIN ? backdrop[m->opts.val[OPT_SCREEN]] : BACKDROP;
+    // The LCD notes' ink is never dimmed: a note lasts 3 s from the last press, dimming needs at least
+    // 15 s with no key, so they can't be on screen together (review phase1-chunk5 F4 follow-up)
+    pal_bg_bank[PAL_LCD][LCD_INK] = INK;
+    // clang-format off
+    if (brightness >= VIEW_W_ONE) { // awake: a plain copy (F6) // mutate: equivalent[>= -> >] (at 256 the mixing path writes the same colours, only slower)
+        // clang-format on
+        memcpy16(pal_bg_mem, shadow, CTRL_PAL_LEN);
+        return;
+    }
     for (int i = 0; i < CTRL_PAL_LEN; i++) pal_bg_mem[i] = view_mix(0, shadow[i], brightness);
-    pal_bg_bank[PAL_LCD][LCD_INK] = view_mix(0, INK, brightness);
 }
 
 // The LCD notes layer (BG0): a splash page while the splash runs, else the current note; nothing
@@ -281,12 +298,17 @@ static void lcd_layer(main_screen *m, splash_phase sp)
 static ui_event settings_modes(main_screen *m, u16 keys)
 {
     ui_event ev = UI_EV_NONE;
+    if (m->copy_pending) { // drawn at the end of last frame: copy now, at the start of VBlank
+        settings_copy();
+        // clang-format off
+        m->copy_pending = false; // mutate: equivalent[false -> true] (copying the unchanged canvas again each frame shows the same)
+        // clang-format on
+    }
     switch (m->mode) {
     case UI_ZOOM_IN:
         set_zoom(++m->step);
         if (m->step == ZOOM_FRAMES) {
-            settings_draw(&m->set); // the text layer is hidden: drawn and copied before fading in
-            settings_copy();
+            m->draw_pending = true; // drawn at the end of this frame, copied before the fade starts
             m->mode = UI_FADE_IN;
             m->step = 0;
         }
@@ -297,12 +319,6 @@ static ui_event settings_modes(main_screen *m, u16 keys)
         if (m->step >= 16) m->mode = UI_SETTINGS;
         break;
     case UI_SETTINGS:
-        if (m->copy_pending) { // redrawn last frame: copy now, at the start of VBlank
-            settings_copy();
-            // clang-format off
-            m->copy_pending = false; // mutate: equivalent[false -> true] (copying the unchanged canvas again each frame shows the same)
-            // clang-format on
-        }
         switch (settings_step(&m->set, keys)) {
         case SET_PLAY:
             m->opts = m->set.opts;              // the options as left in Settings (until power-off)
@@ -320,12 +336,10 @@ static ui_event settings_modes(main_screen *m, u16 keys)
             break;
         case SET_SEND:
             ev = UI_EV_PAIR;
-            settings_draw(&m->set); // the SENT page
-            m->copy_pending = true;
+            m->draw_pending = true; // the SENT page
             break;
         case SET_REDRAW:
-            settings_draw(&m->set);
-            m->copy_pending = true;
+            m->draw_pending = true;
             break;
         default:
             break;
@@ -375,6 +389,7 @@ ui_event screen_main_frame(main_screen *m, u16 word, u16 keys)
     if (m->mode == UI_MAIN) {
         if (m->sending && !m->splash_on && combo_step(&m->combo, keys)) {
             link_paused = true;
+            idle_init(&m->idle);     // back to an awake screen when Settings closes
             m->layer_pending = true; // after the palette writes (it's a 1 KB map fill)
             // clang-format off
             settings_init(&m->set, false, m->assumed[0], m->assumed[1], m->assumed[2], &m->opts, keys); // mutate: accepted[0 -> 1, dec const +1] (the defaults are all 1, so swapping channel/address/packets can't show (pairing bytes: 03_config))
@@ -390,13 +405,11 @@ ui_event screen_main_frame(main_screen *m, u16 word, u16 keys)
 
     // 2. Idle dim / sleep (SPEC §K): only on the main screen after the splash; any key wakes it (and is
     // sent as usual: this only changes the picture)
-    unsigned brightness = 256;
+    unsigned brightness = VIEW_W_ONE;
     if (m->mode == UI_MAIN && !m->splash_on) {
         idle_step(&m->idle, keys);
         brightness =
             idle_brightness(&m->idle, settings_dim_frames(&m->opts), settings_sleep_frames(&m->opts));
-    } else {
-        idle_init(&m->idle);
     }
 
     // 3. Palette writes (still early in VBlank)
@@ -420,6 +433,14 @@ ui_event screen_main_frame(main_screen *m, u16 word, u16 keys)
 
     // 4. The LCD notes layer
     lcd_layer(m, sp);
+
+    // 5. Last, the slow part: redraw a changed Settings page (copied at the next frame's start), after
+    // everything that must land in VBlank (review phase1-chunk5 F2)
+    if (m->draw_pending) {
+        settings_draw(&m->set);
+        m->draw_pending = false;
+        m->copy_pending = true;
+    }
     return ev;
 }
 

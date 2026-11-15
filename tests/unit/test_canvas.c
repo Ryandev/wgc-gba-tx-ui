@@ -32,21 +32,47 @@ static int count(unsigned ink)
 static void fresh(void)
 {
     for (unsigned i = 0; i < sizeof mem.w / sizeof mem.w[0]; i++) mem.w[i] = 0xDEADBEEFu;
-    for (int i = 0; i < 8; i++) mem.guard[i] = mem.before[i] = 0;
+    // non-zero sentinels: an overrun that writes zeros (a clear running past the end) shows too
+    for (int i = 0; i < 8; i++) mem.guard[i] = mem.before[i] = 0xA5A5A5A5u;
     canvas_clear(&c);
 }
 
 static void guard(void)
 {
     for (int i = 0; i < 8; i++) {
-        TEST_ASSERT_EQUAL_HEX32(0, mem.guard[i]);
-        TEST_ASSERT_EQUAL_HEX32(0, mem.before[i]);
+        TEST_ASSERT_EQUAL_HEX32(0xA5A5A5A5u, mem.guard[i]);
+        TEST_ASSERT_EQUAL_HEX32(0xA5A5A5A5u, mem.before[i]);
     }
 }
 
 // 1bpp font: glyph 0 = 'A', a full block
 static const uint8_t block[8] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 static const canvas_font font = {block, 'A', 1};
+
+// Glyph rows with every nibble pattern in both halves: 'B' has low nibbles 0, 2 .. E and high 1, 3 .. F;
+// 'C' the other way round
+static const uint8_t patterns[16] = {0x10, 0x32, 0x54, 0x76, 0x98, 0xBA, 0xDC, 0xFE,
+                                     0x01, 0x23, 0x45, 0x67, 0x89, 0xAB, 0xCD, 0xEF};
+static const canvas_font pattern_font = {patterns, 'B', 2};
+
+static void test_glyph_rows_every_bit_pattern(void)
+{
+    // drawn at x = 3 (straddling two tiles) and at x = 16 (aligned): each pixel is exactly its bit
+    const int xs[2] = {3, 16};
+    for (int k = 0; k < 2; k++) {
+        fresh();
+        canvas_text(&c, &pattern_font, xs[k], 2, "BC", 7);
+        for (int g = 0; g < 2; g++) {
+            for (int r = 0; r < 8; r++) {
+                for (int b = 0; b < 8; b++) {
+                    const unsigned want = (patterns[g * 8 + r] >> b) & 1u ? 7u : 0u;
+                    TEST_ASSERT_EQUAL_UINT_MESSAGE(want, px(xs[k] + g * 8 + b, 2 + r), "glyph pixel");
+                }
+            }
+        }
+        guard();
+    }
+}
 
 static void test_clear_whole_canvas_only(void)
 {
@@ -148,9 +174,10 @@ static void test_rect_clipped_and_full(void)
     guard();
     fresh();
     canvas_rect(&c, 30, 0, TW * 8, 0, 3); // x1 exactly one past the right edge: clamped (10 px)
-    canvas_rect(&c, 0, 20, 0, TH * 8, 5); // y1 exactly one past the bottom: clamped (4 px)
+    // ink 6, not 5: the guard sentinel 0xA5... has 5s, which hid an overrun (mutation testing)
+    canvas_rect(&c, 0, 20, 0, TH * 8, 6); // y1 exactly one past the bottom: clamped (4 px)
     TEST_ASSERT_EQUAL(10, count(3));
-    TEST_ASSERT_EQUAL(4, count(5));
+    TEST_ASSERT_EQUAL(4, count(6));
     guard();
     canvas_rect(&c, 0, 0, TW * 8 - 1, TH * 8 - 1, 0); // and back
     TEST_ASSERT_EQUAL(TW * TH * 64, count(0));
@@ -182,6 +209,7 @@ int main(void)
 {
     UNITY_BEGIN();
     RUN_TEST(test_clear_whole_canvas_only);
+    RUN_TEST(test_glyph_rows_every_bit_pattern);
     RUN_TEST(test_pixel_layout_any_width);
     RUN_TEST(test_pixel_overwrite_keeps_its_neighbours);
     RUN_TEST(test_rect_inside_one_tile);

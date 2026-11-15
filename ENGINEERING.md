@@ -222,6 +222,12 @@ values, a note after Settings, rect edges). Two canvas_rect survivors exposed an
 now takes the offsets from x0 & 7 / x1 & 7. Final: 257/257 on those files. *Accepted:* swapping the
 assumed channel/address/packets (the defaults are all 1).
 
+**Phase 1 chunk 5 (2026-11-15):** a process slip first: a blanket `make visual-approve` accepted a
+regression (boot frame 8 white again); Gemini caught it. Approvals now always name the screens looked
+at (`make visual-approve SCREEN=...`). Mutation then found guard words that couldn't see an overrun
+writing zeros (now sentinels), untested nibble patterns, and a test ink equal to the sentinel's
+nibble that masked an overrun. 591/604, then 173/173 on the canvas. *Accepted:* the VBlank key latch.
+
 **Colour-only captures.** A capture named `*_colours` (e.g. `pairing__frame7_colours`) is compared by
 the set of colours it contains, not pixel by pixel. It's for boot transition frames, where the
 scanline at which startup finishes moves with code size, but what matters is that no garbage

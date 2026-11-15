@@ -83,7 +83,9 @@ $(B)/.protocol-$(PROTOCOL):
 
 $(B)/obj/%.iwram.o: src/%.iwram.c $(DEPS)/.stamp $(B)/.protocol-$(PROTOCOL) | $(GEN_H)
 	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) -MMD -MP -marm -c $< -o $@
+	@# -fno-tree-loop-distribute-patterns: IWRAM code must not turn its loops into calls to newlib's
+	@# memset/memcpy, which run as Thumb from ROM (review phase1-chunk5 F2: canvas_clear did)
+	$(CC) $(CFLAGS) -fno-tree-loop-distribute-patterns -MMD -MP -marm -c $< -o $@
 
 $(B)/obj/%.o: src/%.c $(DEPS)/.stamp $(B)/.protocol-$(PROTOCOL) | $(GEN_H)
 	@mkdir -p $(dir $@)

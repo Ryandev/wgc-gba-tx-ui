@@ -30,6 +30,29 @@
 
 static u16 pressed_now(void) { return (u16)(~REG_KEYINPUT & K_ALL); }
 
+// Keys seen held at any VBlank since the screen last read them: a tap shorter than an overrunning
+// frame (a slow page redraw) is still seen (review phase1-chunk5 F2). Only the screen reads this;
+// the cart sends what the send IRQ reads itself, every 2 ms.
+static volatile u16 key_latch;
+
+// clang-format off
+static void vblank_isr(void) { key_latch |= pressed_now(); } // tiny: one OR (SPEC §0 rule 7) // mutate: accepted[|= -> &=] (the latch is a safety net for frames that overrun; with page redraws now under a frame, no test frame overruns, so it can't be observed in the emulator)
+// clang-format on
+
+static u16 keys_since_last_frame(void)
+{
+    const u16 ime = REG_IME;
+    // clang-format off
+    REG_IME = 0; // read and clear together, so a VBlank in between can't lose a press // mutate: accepted[0 -> 1] (a VBlank landing between the read and the clear: not reproducible in the tests)
+    // clang-format on
+    const u16 keys = key_latch;
+    key_latch = 0;
+    REG_IME = ime;
+    // clang-format off
+    return (u16)(keys | pressed_now()); // mutate: accepted[| -> &] (the latch is a safety net for frames that overrun; with page redraws now under a frame, no test frame overruns, so it can't be observed in the emulator)
+    // clang-format on
+}
+
 // Sync, the GB pair if GB mode, then the 2 ms sender (SPEC §S boot order)
 static void start_link(bool gb_mode)
 {
@@ -41,7 +64,7 @@ static void start_link(bool gb_mode)
 int main(void)
 {
     irq_init(NULL);
-    irq_add(II_VBLANK, NULL);
+    irq_add(II_VBLANK, vblank_isr);
 
     // Read the boot holds BEFORE anything goes on the bus (SPEC.md §S boot order).
     const u16 boot_keys = pressed_now(); // one snapshot for every boot decision (phase1-chunk3 F5)
@@ -84,7 +107,7 @@ int main(void)
     for (;;) {
         VBlankIntrWait();
         // Palette writes first, at the start of VBlank, from the word the send IRQ last sent
-        switch (screen_main_frame(&screen, link_last_word, pressed_now())) {
+        switch (screen_main_frame(&screen, link_last_word, keys_since_last_frame())) {
         case UI_EV_START_LINK: // PLAY from boot-time Settings: GB mode as set there (or held A)
             start_link(screen_gb_mode(&screen));
             break;

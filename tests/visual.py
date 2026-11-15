@@ -82,6 +82,15 @@ SCREENS = {
                 'k:A', 'f:2', 'k:-', 'f:3', 'k:<', 'f:2', 'k:-', 'f:2', 'k:v', 'f:2', 'k:-', 'f:2', 'k:v', 'f:2',
                 'k:-', 'f:2', 'k:>', 'f:2', 'k:-', 'f:3', 'p:edited', 'k:B', 'f:2', 'k:-', 'f:2', 'k:B', 'f:2',
                 'k:-', 'f:40', 'p:screen_off', 'k:A', 'f:3', 'k:-', 'f:3', 'p:off_key_stays_off'],
+    # SCREEN BLACK and STATUS NOTES OFF (review phase1-chunk5 F4), in GB mode: with notes off, tapping L
+    # shows no note and no strike, only the amber LED; then SCREEN BLACK hides everything
+    'display_more': ['k:A', 'f:30', 'k:-', 'f:200', 'k:lrs', 'f:61', 'k:-', 'f:25', 'k:v', 'f:3', 'k:-', 'f:3',
+                     'k:v', 'f:3', 'k:-', 'f:3', 'k:A', 'f:3', 'k:-', 'f:3', 'k:v', 'f:3', 'k:-', 'f:3', 'k:v', 'f:3',
+                     'k:-', 'f:3', 'k:v', 'f:3', 'k:-', 'f:3', 'k:<', 'f:3', 'k:-', 'f:3', 'k:B', 'f:3', 'k:-', 'f:3',
+                     'k:B', 'f:3', 'k:-', 'f:40', 'k:l', 'f:3', 'k:-', 'f:5', 'p:notes_off_l', 'k:lrs', 'f:61', 'k:-',
+                     'f:25', 'k:v', 'f:3', 'k:-', 'f:3', 'k:v', 'f:3', 'k:-', 'f:3', 'k:A', 'f:3', 'k:-', 'f:3', 'k:v',
+                     'f:3', 'k:-', 'f:3', 'k:v', 'f:3', 'k:-', 'f:3', 'k:>', 'f:3', 'k:-', 'f:3', 'k:>', 'f:3', 'k:-',
+                     'f:3', 'p:black_set', 'k:B', 'f:3', 'k:-', 'f:3', 'k:B', 'f:3', 'k:-', 'f:40', 'p:screen_black'],
     # Boot-time Settings: GB mode on the INPUT page, then PLAY: amber LED (the GB pair is checked in
     # the timing scenario 13_boot_gb)
     'boot_gb': ['k:S', 'f:30', 'k:-', 'f:3', 'k:v', 'f:2', 'k:-', 'f:2', 'k:v', 'f:2', 'k:-', 'f:2', 'k:v', 'f:2',

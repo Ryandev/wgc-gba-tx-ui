@@ -38,7 +38,8 @@ void canvas_rect(const canvas *c, int x0, int y0, int x1, int y1, unsigned ink)
             const int b = tx == x1 >> 3 ? x1 & 7 : 7;
             const uint32_t mask = (0xFFFFFFFFu >> (4 * (7 - b))) & (0xFFFFFFFFu << (4 * a));
             const int w = word_at(c, tx * 8, y);
-            c->words[w] = (c->words[w] & ~mask) | (fill & mask);
+            // a whole tile row: just write it (no read of the old value; review phase1-chunk5 F2)
+            c->words[w] = mask == 0xFFFFFFFFu ? fill : (c->words[w] & ~mask) | (fill & mask);
         }
     }
 }
@@ -51,11 +52,13 @@ static void glyph_row(const canvas *c, int x, int y, unsigned bits, unsigned ink
     if (bits == 0 || y < 0 || y >= c->th * 8 || x >= c->tw * 8) return;
     // clang-format off
     if (x <= -8) return; // mutate: equivalent[<= -> <, dec const +1] (x = -8 or -9: tile column -1, no spill: writes nothing)
-    uint32_t mask = 0; // a nibble of 1s for each lit pixel, pixel b at bits 4b
-    for (unsigned b = 0; b < 8; b++) { // mutate: equivalent[< -> <=, dec const +1] (glyph rows are 8 bits: bit 8 is 0)
-        if (bits & (1u << b)) mask |= 0xFu << (b * 4);
-    }
     // clang-format on
+    // a nibble of 1s for each lit pixel, pixel b at bits 4b: two table lookups (review phase1-chunk5 F2)
+    // clang-format off
+    static const uint16_t nib[16] = {0x0000, 0x000F, 0x00F0, 0x00FF, 0x0F00, 0x0F0F, 0x0FF0, 0x0FFF, // mutate: equivalent[dec const +1] (larger array)
+                                     0xF000, 0xF00F, 0xF0F0, 0xF0FF, 0xFF00, 0xFF0F, 0xFFF0, 0xFFFF};
+    // clang-format on
+    const uint32_t mask = nib[bits & 15u] | (uint32_t)nib[(bits >> 4) & 15u] << 16;
     const uint32_t value = mask & ((ink & 0xFu) * 0x11111111u);
     const unsigned xs = (unsigned)(x + 8); // >= 1: keeps the shifts below on unsigned values
     const int tx = (int)(xs >> 3) - 1;     // tile column of the row's left pixel (may be -1)

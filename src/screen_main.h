@@ -44,6 +44,7 @@ typedef struct {
     ui_mode mode;
     int step;           // zoom step (0..ZOOM_FRAMES) or fade level (0..16) in the current mode
     bool sending;       // key words are going out (false in boot-time Settings until PLAY)
+    bool draw_pending;  // the Settings page changed: redraw it at the end of this frame
     bool copy_pending;  // the Settings canvas was redrawn: copy it at the next frame's start
     bool layer_pending; // set up the Settings layer after this frame's palette writes
     u8 assumed[3];      // the assumed pairing (build-time defaults): in-session Settings shows these
