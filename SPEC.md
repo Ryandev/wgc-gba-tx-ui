@@ -263,6 +263,11 @@ countdown bar. It all hides after about 3 s from the last L/R press. See `mockup
 - A Settings screen listing screen-off, black screen, GB mode and key letters, as toggles.
   It's opened from the boot-time settings screen, or from the overlay if stretch N is built.
 - Without persistence (F), the toggles last until power-off. The stock boot holds still work.
+- **Built (Phase 1 chunk 5):** Settings > DISPLAY (mockup 21): IDLE DIM (OFF/15S/30S/1MIN/2MIN),
+  IDLE SLEEP (OFF/1/2/5/10MIN), SCREEN (ON/OFF/BLACK), STATUS NOTES (ON/OFF: the LCD notes and the
+  strike; the LED still shows the state). Settings > INPUT (mockup 22): GB MODE, a toggle in boot-time
+  Settings (sent at PLAY: 13_boot_gb), read-only in-session. Key letters dropped (the drawing shows
+  the keys). THEME waits for saves (U).
 
 ### H. Turbo / autofire (Phase 3)
 - Per-button turbo for A, B, L, R at selectable rates (e.g. 10/15/20/30 Hz, synced to the 2 ms
@@ -287,6 +292,9 @@ countdown bar. It all hides after about 3 s from the last L/R press. See `mockup
   to a blank or black screen. Any key wakes it. That wake press is still sent as normal: we never
   swallow gameplay input.
 - Packets keep flowing while the screen is blank.
+- **Built (Phase 1 chunk 5):** `src/core/idle.c`; the palette is computed into a shadow and written out
+  through the idle brightness (dim = 96/256 after a 0.5 s fade; asleep = black). Timing scenario
+  14_idle_sleep: keys still sent while asleep, the wake press within budget.
 
 ### L. Sound (Phase 2)
 - Optional button clicks and a pairing chime, **off by default**. The speaker already buzzes from

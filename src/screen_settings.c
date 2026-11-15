@@ -102,7 +102,7 @@ static void row(const canvas_font *f, int y, const char *label, bool selected)
 
 static void draw_home(const canvas_font *f, const settings_state *s)
 {
-    static const char *const label[HOME_ROWS] = {"PLAY", "PAIRING", "ABOUT"};
+    static const char *const label[HOME_ROWS] = {"PLAY", "PAIRING", "DISPLAY", "INPUT", "ABOUT"};
     bars(f, "SETTINGS", "NOT SENDING", "A:OPEN", "START:PLAY");
     for (int r = 0; r < HOME_ROWS; r++) row(f, 20 + 14 * r, label[r], r == s->row);
 }
@@ -143,6 +143,42 @@ static void draw_pairing(const canvas_font *f, const settings_state *s)
                                                "POWER ON."};
     const char *const *hint = s->boot ? boot_hint : session_hint;
     for (int i = 0; i < 3; i++) canvas_text(&cv, f, 8, 96 + 10 * i, hint[i], GREY);
+}
+
+// A row of an options page (mockups 21, 22): rows 16 px apart from y = 20; the selected one shows
+// '<' and '>' around its value, as on the pairing page
+static void option_row(const canvas_font *f, int r, const char *label, const char *value, bool selected)
+{
+    const int y = 20 + 16 * r;
+    row(f, y, label, selected);
+    canvas_text_right(&cv, f, 224, y, value, selected ? GREEN : DARK);
+    if (selected) {
+        canvas_text(&cv, f, 168, y, "<", GREEN);
+        canvas_text(&cv, f, 225, y, ">", GREEN);
+    }
+}
+
+static void draw_display(const canvas_font *f, const settings_state *s)
+{
+    static const char *const label[DISPLAY_ROWS] = {"IDLE DIM", "IDLE SLEEP", "SCREEN", "STATUS NOTES"};
+    bars(f, "DISPLAY", "", "<>:CHANGE", "B:BACK");
+    for (int r = 0; r < DISPLAY_ROWS; r++)
+        option_row(f, r, label[r], settings_opt_text(r, s->opts.val[r]), r == s->sub);
+    canvas_text(&cv, f, 8, 116, "SCREEN: ON / OFF / BLACK", GREY);
+    canvas_text(&cv, f, 8, 126, "(BLACK FOR BACKLIT MODS)", GREY);
+}
+
+static void draw_input(const canvas_font *f, const settings_state *s)
+{
+    bars(f, "INPUT", "", s->boot ? "<>:CHANGE" : "", "B:BACK");
+    option_row(f, 0, "GB MODE", s->opts.gb_mode ? "ON" : "OFF", s->boot); // in-session: read-only
+    if (s->boot) {
+        canvas_text(&cv, f, 8, 116, "GB MODE: L AND R ARE NOT", GREY);
+        canvas_text(&cv, f, 8, 126, "SENT. APPLIES AT PLAY.", GREY);
+    } else {
+        canvas_text(&cv, f, 8, 116, "SET AT BOOT: HOLD A, OR", GREY);
+        canvas_text(&cv, f, 8, 126, "HOLD START FOR SETTINGS.", GREY);
+    }
 }
 
 static void draw_sent(const canvas_font *f)
@@ -202,6 +238,12 @@ void settings_draw(const settings_state *s)
         break;
     case SET_PAIRING:
         draw_pairing(&f, s);
+        break;
+    case SET_DISPLAY:
+        draw_display(&f, s);
+        break;
+    case SET_INPUT:
+        draw_input(&f, s);
         break;
     case SET_ABOUT:
         draw_about(&f);

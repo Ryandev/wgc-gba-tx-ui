@@ -1,6 +1,7 @@
 #include "screen_main.h"
 #include <tonc.h>
 #include "assets.h"
+#include "core/idle.h"
 #include "core/lcd.h"
 #include "core/zoom.h"
 #include "link.h"
@@ -8,16 +9,18 @@
 #include "version.h"
 #include "ctrl.h" // generated from assets/controller.svg (tools/svg_to_gba.py)
 
-#define CBB_CTRL 0              // charblock with the drawing's 8bpp tiles (CTRL_TILES * 64 bytes)
-#define SBB_CTRL 28             // screenblock with its 32x32 affine map (1 KB)
-#define CBB_LCD  2              // charblock with the LCD canvas: tile 0 blank, then LCD_TILES tiles
-#define SBB_LCD  31             // screenblock with the LCD layer's map
-#define PAL_LCD  15             // 4bpp palette bank for the LCD text
-#define LCD_INK  1              // its ink entry
-#define BACKDROP RGB15(2, 3, 5) // #101828, the mockups' background
-#define INK      RGB15(3, 7, 3) // #1C3818, the mockups' LCD ink
-#define LED_OFF  RGB15(5, 4, 8) // #2A2440: the splash's LED before power-on
-#define LCD_DARK RGB15(1, 2, 4) // #0C1020: the splash's LCD before power-on
+#define CBB_CTRL     0  // charblock with the drawing's 8bpp tiles (CTRL_TILES * 64 bytes)
+#define SBB_CTRL     28 // screenblock with its 32x32 affine map (1 KB)
+#define CBB_LCD      2  // charblock with the LCD canvas: tile 0 blank, then LCD_TILES tiles
+#define SBB_LCD      31 // screenblock with the LCD layer's map
+#define PAL_LCD      15 // 4bpp palette bank for the LCD text
+#define LCD_INK      1  // its ink entry
+#define BGR(r, g, b) ((u16)((r) | ((g) << 5) | ((b) << 10))) // RGB15 as a constant expression
+#define BACKDROP     BGR(2, 3, 5)                            // #101828, the mockups' background
+#define INK          BGR(3, 7, 3)                            // #1C3818, the mockups' LCD ink
+#define LED_OFF      BGR(5, 4, 8)                            // #2A2440: the splash's LED before power-on
+#define LCD_DARK     BGR(1, 2, 4)                            // #0C1020: the splash's LCD before power-on
+#define OFF_GREY     BGR(8, 8, 8) // Screen OFF: the stock ROM's plain screen (SPEC §G)
 
 // What the LCD layer shows: no page, a note (its note_id, 1 .. NOTE_COUNT - 1) or a splash page
 enum { PAGE_NONE = NOTE_NONE, PAGE_TITLE = NOTE_COUNT, PAGE_TIP };
@@ -78,11 +81,13 @@ static const char *const *page_lines(int page, int *count)
 }
 
 // The LCD page for this frame: a splash page while the splash runs, else the current note.
-static int page_now(splash_phase sp, const notes_state *n)
+static int page_now(splash_phase sp, const main_screen *m)
 {
     if (sp == SPLASH_TITLE) return PAGE_TITLE;
     if (sp == SPLASH_TIP) return PAGE_TIP;
-    if (sp == SPLASH_DONE) return (int)notes_current(n);
+    // notes only with STATUS NOTES on and the screen on (SPEC §G); the LED still shows the state
+    const bool notes = m->opts.val[OPT_NOTES] != 0 && m->opts.val[OPT_SCREEN] == SCREEN_ON;
+    if (sp == SPLASH_DONE && notes) return (int)notes_current(&m->notes);
     return PAGE_NONE; // fade and power-on: blank LCD
 }
 
@@ -139,10 +144,12 @@ void screen_main_init(main_screen *m, const screen_main_config *cfg)
     notes_init(&m->notes, cfg->gb_mode, cfg->held_limit);
     splash_init(&m->splash, cfg->held_word);
     combo_init(&m->combo);
-    settings_init(&m->set, true, cfg->channel, cfg->address, cfg->packets, cfg->held_keys);
+    settings_opts_default(&m->opts);
+    m->opts.gb_mode = cfg->gb_mode;
+    idle_init(&m->idle);
+    settings_init(&m->set, true, cfg->channel, cfg->address, cfg->packets, &m->opts, cfg->held_keys);
     settings_set_assumed(cfg->channel, cfg->address, cfg->packets);
     m->splash_on = !cfg->boot_settings; // boot-time Settings: no splash, nothing sent (SPEC §S)
-    m->faded = false; // mutate: equivalent[false -> true] (the first frame is a fade frame: sets it anyway)
     m->shown = PAGE_NONE;
     m->show_pending =
         false; // mutate: equivalent[false -> true] (only read once a note is shown, after it's set)
@@ -199,51 +206,58 @@ static void palette_faded(unsigned weight)
     }
 }
 
-// Main-screen palette: buttons, the splash's hints, strike lines and the LED (SPEC §A, §B, §C).
-static void palette_main(main_screen *m, splash_phase sp)
+static u16 shadow[CTRL_PAL_LEN]; // this frame's colours, before the idle dim
+
+// Main-screen palette: buttons, the splash's hints, strike lines and the LED (SPEC §A, §B, §C), built in
+// a shadow copy and written out through the idle brightness (SPEC §K: dim fades towards black, 0 =
+// asleep, black), with the backdrop for the SCREEN option (§G).
+static void palette_main(main_screen *m, splash_phase sp, unsigned brightness)
 {
     const bool gb_mode = m->notes.gb_mode;
-    if (m->faded) { // first frame after the fade: back to the drawing's own colours
-        memcpy16(pal_bg_mem, ctrl_pal, CTRL_PAL_LEN);
-        pal_bg_mem[0] = BACKDROP;
-        m->faded = false; // mutate: equivalent[false -> true] (restoring again each frame looks the same)
-    }
+    memcpy16(shadow, ctrl_pal, CTRL_PAL_LEN);
     for (int b = 0; b < VIEW_BUTTONS; b++) {
         u16 normal[3]; // mutate: equivalent[dec const +1] (larger array)
         for (int i = 0; i < 3; i++) normal[i] = ctrl_pal[entries[b][i]];
         u16 out[3]; // mutate: equivalent[dec const +1] (larger array)
         view_button_colours(&m->view, (view_button)b, gb_mode, normal, out);
-        for (int i = 0; i < 3; i++) pal_bg_mem[entries[b][i]] = out[i];
+        for (int i = 0; i < 3; i++) shadow[entries[b][i]] = out[i];
     }
     if (sp == SPLASH_TIP) { // the tip's buttons, lit as if pressed (storyboard frame 4)
         static const view_button hint[] = {VB_L, VB_R, VB_SELECT};
         // clang-format off
         for (unsigned h = 0; h < sizeof hint / sizeof hint[0]; h++) { // mutate: equivalent[0 -> 1] (sizeof hint[1] == sizeof hint[0])
             // clang-format on
-            pal_bg_mem[entries[hint[h]][0]] = VIEW_LIT;
-            pal_bg_mem[entries[hint[h]][1]] = VIEW_LIT_HI;
-            pal_bg_mem[entries[hint[h]][2]] = VIEW_LIT_LO;
+            shadow[entries[hint[h]][0]] = VIEW_LIT;
+            shadow[entries[hint[h]][1]] = VIEW_LIT_HI;
+            shadow[entries[hint[h]][2]] = VIEW_LIT_LO;
         }
     }
-    // The strike lines take their shoulder's current fill (invisible), or amber when struck (§C)
-    const bool strike = notes_strike(&m->notes);
-    pal_bg_mem[CTRL_STRIKE_L] = strike ? VIEW_WARN : pal_bg_mem[CTRL_SHOULDER_L];
-    pal_bg_mem[CTRL_STRIKE_R] = strike ? VIEW_WARN : pal_bg_mem[CTRL_SHOULDER_R];
+    // The strike lines take their shoulder's current fill (invisible), or amber when struck (§C);
+    // with STATUS NOTES off there's no strike either (the LED still shows GB mode)
+    const bool strike = m->opts.val[OPT_NOTES] != 0 && notes_strike(&m->notes);
+    shadow[CTRL_STRIKE_L] = strike ? VIEW_WARN : shadow[CTRL_SHOULDER_L];
+    shadow[CTRL_STRIKE_R] = strike ? VIEW_WARN : shadow[CTRL_SHOULDER_R];
     // Red while gameplay input isn't sent: Settings open, or boot-time Settings before PLAY (§C, §S)
     const bool not_sending = !m->sending || m->mode != UI_MAIN;
     u16 led[3]; // mutate: equivalent[dec const +1] (larger array)
     view_led_colours(view_led_status(gb_mode, notes_key_held(&m->notes), not_sending), ctrl_pal[CTRL_BODY],
                      led);
-    pal_bg_mem[CTRL_LED] = led[0];
-    pal_bg_mem[CTRL_LED_GLOW1] = led[1];
-    pal_bg_mem[CTRL_LED_GLOW2] = led[2];
+    shadow[CTRL_LED] = led[0];
+    shadow[CTRL_LED_GLOW1] = led[1];
+    shadow[CTRL_LED_GLOW2] = led[2];
+
+    static const u16 backdrop[3] = {
+        [SCREEN_ON] = BACKDROP, [SCREEN_OFF_GREY] = OFF_GREY, [SCREEN_OFF_BLACK] = 0};
+    shadow[0] = backdrop[m->opts.val[OPT_SCREEN]];
+    for (int i = 0; i < CTRL_PAL_LEN; i++) pal_bg_mem[i] = view_mix(0, shadow[i], brightness);
+    pal_bg_bank[PAL_LCD][LCD_INK] = view_mix(0, INK, brightness);
 }
 
 // The LCD notes layer (BG0): a splash page while the splash runs, else the current note; nothing
 // while zoomed (it's placed for the normal view).
 static void lcd_layer(main_screen *m, splash_phase sp)
 {
-    const int now = m->mode == UI_MAIN ? page_now(sp, &m->notes) : PAGE_NONE;
+    const int now = m->mode == UI_MAIN ? page_now(sp, m) : PAGE_NONE;
     if (now != m->shown) {
         REG_DISPCNT &= (u16)~DCNT_BG0; // still in VBlank: hidden from this frame on
         m->shown = now;
@@ -291,6 +305,8 @@ static ui_event settings_modes(main_screen *m, u16 keys)
         }
         switch (settings_step(&m->set, keys)) {
         case SET_PLAY:
+            m->opts = m->set.opts;              // the options as left in Settings (until power-off)
+            m->notes.gb_mode = m->opts.gb_mode; // can only change in boot-time Settings, before sending
             if (!m->sending) {
                 // boot-time Settings: the link starts now (sync first, SPEC §S), paused like in-session
                 // Settings until the zoom out ends, so the held A/Start and anything pressed during
@@ -361,7 +377,7 @@ ui_event screen_main_frame(main_screen *m, u16 word, u16 keys)
             link_paused = true;
             m->layer_pending = true; // after the palette writes (it's a 1 KB map fill)
             // clang-format off
-            settings_init(&m->set, false, m->assumed[0], m->assumed[1], m->assumed[2], keys); // mutate: accepted[0 -> 1, dec const +1] (the defaults are all 1, so swapping channel/address/packets can't show (pairing bytes: 03_config))
+            settings_init(&m->set, false, m->assumed[0], m->assumed[1], m->assumed[2], &m->opts, keys); // mutate: accepted[0 -> 1, dec const +1] (the defaults are all 1, so swapping channel/address/packets can't show (pairing bytes: 03_config))
             // clang-format on
             // no GB note, strike or held-key state carries into or out of Settings (F5)
             notes_init(&m->notes, m->notes.gb_mode, m->notes.held_limit);
@@ -372,12 +388,28 @@ ui_event screen_main_frame(main_screen *m, u16 word, u16 keys)
         ev = settings_modes(m, keys);
     }
 
-    // 2. Palette writes (still early in VBlank)
+    // 2. Idle dim / sleep (SPEC §K): only on the main screen after the splash; any key wakes it (and is
+    // sent as usual: this only changes the picture)
+    unsigned brightness = 256;
+    if (m->mode == UI_MAIN && !m->splash_on) {
+        idle_step(&m->idle, keys);
+        brightness =
+            idle_brightness(&m->idle, settings_dim_frames(&m->opts), settings_sleep_frames(&m->opts));
+    } else {
+        idle_init(&m->idle);
+    }
+
+    // 3. Palette writes (still early in VBlank)
     if (sp == SPLASH_FADE) {
         palette_faded(splash_fade_weight(&m->splash));
-        m->faded = true;
     } else {
-        palette_main(m, sp);
+        palette_main(m, sp, brightness);
+    }
+    // SCREEN OFF / BLACK (§G): the drawing is hidden on the main screen (shown again for Settings)
+    if (m->mode == UI_MAIN && m->opts.val[OPT_SCREEN] != SCREEN_ON) {
+        REG_DISPCNT &= (u16)~DCNT_BG2;
+    } else {
+        REG_DISPCNT |= DCNT_BG2;
     }
     if (m->layer_pending) {
         settings_layer_init(); // main loop work (the send IRQ preempts it); the layer stays hidden
@@ -386,9 +418,11 @@ ui_event screen_main_frame(main_screen *m, u16 word, u16 keys)
         // clang-format on
     }
 
-    // 3. The LCD notes layer
+    // 4. The LCD notes layer
     lcd_layer(m, sp);
     return ev;
 }
 
 const u8 *pairing_values(const main_screen *m) { return m->set.pair.val; }
+
+bool screen_gb_mode(const main_screen *m) { return m->opts.gb_mode; }

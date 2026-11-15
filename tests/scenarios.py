@@ -62,6 +62,16 @@ SCENARIOS = {
                           expect=[0, 0x40, 0], pre={'v1.1a': (0x49, 0x63, 0x5A), 'v1.1b': (0x29, 0x23, 0x1A)},
                           nothing_before_frame=50, lat_from_frame=90,
                           note='boot-time Settings: nothing before PLAY, neutral while zooming out'),
+    # Boot-time Settings: INPUT > GB MODE on, then Start (PLAY): sync then the GB pair (SPEC §G)
+    '13_boot_gb':    dict(ours=['k:S', 'f:30', 'k:-', 'f:3'] + TAP('v') * 3 + TAP('A') + TAP('>') + TAP('B') + ['k:S', 'f:3', 'k:-',
+                          'f:40', 'k:^', 'f:5', 'k:-', 'f:5'],
+                          expect=[0, 0x40, 0], pre={'v1.1a': (0x49, 0x63, 0x5A), 'v1.1b': (0x29, 0x23, 0x1A)},
+                          lat_from_frame=120, note='GB mode set in boot-time Settings: GB pair at PLAY'),
+    # Asleep (SPEC §K, black after 2 min idle): the cart keeps sending, and the waking press is sent as
+    # usual within the timing budget
+    '14_idle_sleep': dict(ours=['f:7600', 'k:A', 'f:5', 'k:-', 'f:5', 'k:^', 'f:5', 'k:-', 'f:5'],
+                          expect=[0, 0x01, 0, 0x40, 0], pre={'v1.1a': (0x49,), 'v1.1b': (0x29,)},
+                          note='asleep (black screen): keys still sent, the wake press too'),
     '07_xy':         dict(ours=['f:30', 'k:lrA', 'f:5', 'k:lrB', 'f:5', 'k:lrAB', 'f:5', 'k:-', 'f:5'],
                           note='L+R+A/B -> X/Y on v1.1b; plain L+R+A/B on v1.1a'),
 }

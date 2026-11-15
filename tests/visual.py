@@ -73,10 +73,27 @@ SCREENS = {
     # is intact after the Settings layer was set up) and no note carried over from before Settings
     'settings_then_note': ['k:A', 'f:30', 'k:-', 'f:200', 'k:lrs', 'f:61', 'k:-', 'f:25', 'p:opened', 'k:B', 'f:3',
                            'k:-', 'f:30', 'p:closed', 'k:l', 'f:3', 'k:-', 'f:5', 'p:note'],
+    # Idle (SPEC §K, defaults dim 30 s / sleep 2 min): dimming, dim, asleep (black), a key wakes it (and
+    # lights, so it was sent as usual)
+    # (the quiet count starts when the splash ends, at about frame 190)
+    'idle': ['f:200', 'f:1815', 'p:dimming', 'f:30', 'p:dim', 'f:5400', 'p:asleep', 'k:B', 'f:3', 'p:woken'],
+    # Display options (SPEC §G): SCREEN OFF from in-session Settings; IDLE DIM changed; then BLACK
+    'display': ['f:200', 'k:lrs', 'f:61', 'k:-', 'f:25', 'k:v', 'f:2', 'k:-', 'f:2', 'k:v', 'f:2', 'k:-', 'f:2',
+                'k:A', 'f:2', 'k:-', 'f:3', 'k:<', 'f:2', 'k:-', 'f:2', 'k:v', 'f:2', 'k:-', 'f:2', 'k:v', 'f:2',
+                'k:-', 'f:2', 'k:>', 'f:2', 'k:-', 'f:3', 'p:edited', 'k:B', 'f:2', 'k:-', 'f:2', 'k:B', 'f:2',
+                'k:-', 'f:40', 'p:screen_off', 'k:A', 'f:3', 'k:-', 'f:3', 'p:off_key_stays_off'],
+    # Boot-time Settings: GB mode on the INPUT page, then PLAY: amber LED (the GB pair is checked in
+    # the timing scenario 13_boot_gb)
+    'boot_gb': ['k:S', 'f:30', 'k:-', 'f:3', 'k:v', 'f:2', 'k:-', 'f:2', 'k:v', 'f:2', 'k:-', 'f:2', 'k:v', 'f:2',
+                'k:-', 'f:2', 'k:A', 'f:2', 'k:-', 'f:3', 'k:>', 'f:2', 'k:-', 'f:3', 'p:input', 'k:B', 'f:2', 'k:-', 'f:2',
+                'k:S', 'f:3', 'k:-',
+                'f:30', 'p:main'],
     # In-session Settings (SPEC §N): hold L+R+Select 1 s; zoom in (LED red from the first frame), the
     # pages, then out again and back to the controller with the LED green
     'settings': ['f:200', 'k:lrs', 'f:61', 'p:zoom_start', 'f:5', 'p:zoom_mid', 'k:-', 'f:20', 'p:home',
                  'k:v', 'f:3', 'k:-', 'f:3', 'k:A', 'f:3', 'k:-', 'f:3', 'p:pairing', 'k:B', 'f:3', 'k:-', 'f:3',
+                 'k:v', 'f:3', 'k:-', 'f:3', 'k:A', 'f:3', 'k:-', 'f:3', 'p:display', 'k:B', 'f:3', 'k:-', 'f:3',
+                 'k:v', 'f:3', 'k:-', 'f:3', 'k:A', 'f:3', 'k:-', 'f:3', 'p:input', 'k:B', 'f:3', 'k:-', 'f:3',
                  'k:v', 'f:3', 'k:-', 'f:3', 'k:A', 'f:3', 'k:-', 'f:3', 'p:about', 'k:B', 'f:3', 'k:-', 'f:3',
                  'k:B', 'f:3', 'k:-', 'f:4', 'p:fade_out', 'f:10', 'p:zoom_out', 'f:20', 'p:back'],
 }

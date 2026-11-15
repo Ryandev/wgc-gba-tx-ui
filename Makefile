@@ -170,7 +170,9 @@ endef
 
 # Every test binary is built for both protocols (constants differ: split, limits, XY default).
 unit: $(DEPS)/.stamp
-	@mkdir -p $(B)/unit && find $(B)/unit -name '*.gcda' -delete
+	@# old .gcda counts and .gcno notes go (a renamed source, e.g. canvas.c -> canvas.iwram.c, left a
+	@# stale .gcno that gcovr then failed on)
+	@mkdir -p $(B)/unit && find $(B)/unit \( -name '*.gcda' -o -name '*.gcno' \) -delete
 	@set -e; for proto in V11A V11B; do for t in $(UNIT_SRC); do \
 	  n=$$(basename $$t .c); \
 	  $(call build-unit,$$proto,$$t,$(abspath $(B))/unit/$$proto/$$n,--coverage); \

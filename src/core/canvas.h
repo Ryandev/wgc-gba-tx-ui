@@ -1,4 +1,5 @@
-// A 4bpp tile canvas of any size, rendered in RAM and copied to VRAM by the hardware layer.
+// A 4bpp tile canvas of any size, rendered in RAM and copied to VRAM by the hardware layer. The code
+// (canvas.iwram.c) runs from IWRAM as ARM: page redraws from ROM took over a frame and missed taps.
 // Pure: no hardware access, host-testable. Tiles are row-major across the canvas; within a tile each
 // pixel row is one u32 with pixel x at bits 4x (the GBA's 4bpp tile layout). Colour 0 = transparent.
 // Used by the LCD notes (core/lcd.c) and the full-screen Settings pages.

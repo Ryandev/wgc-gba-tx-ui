@@ -4,6 +4,7 @@
 #pragma once
 #include <stdbool.h>
 #include <tonc_types.h>
+#include "core/idle.h"
 #include "core/notes.h"
 #include "core/settings.h"
 #include "core/splash.h"
@@ -38,7 +39,6 @@ typedef struct {
     notes_state notes;
     splash_state splash;
     bool splash_on;    // splash still running
-    bool faded;        // the palette holds faded colours (restore it all once the fade ends)
     int shown;         // LCD page currently rendered (screen_main.c PAGE_*)
     bool show_pending; // rendered while hidden; show it at the next frame's start
     ui_mode mode;
@@ -47,6 +47,8 @@ typedef struct {
     bool copy_pending;  // the Settings canvas was redrawn: copy it at the next frame's start
     bool layer_pending; // set up the Settings layer after this frame's palette writes
     u8 assumed[3];      // the assumed pairing (build-time defaults): in-session Settings shows these
+    settings_opts opts; // display options and GB mode (until power-off: no saves yet)
+    idle_state idle;    // idle dim / sleep (SPEC §K)
     combo_state combo;
     settings_state set;
 } main_screen;
@@ -60,6 +62,9 @@ void screen_main_init(main_screen *m, const screen_main_config *cfg);
 // REG_KEYINPUT-order pressed mask (Settings reads keys directly: nothing is sent while it's open).
 // Returns what the caller must do on the link.
 ui_event screen_main_frame(main_screen *m, u16 word, u16 keys);
+
+// GB mode as set at boot (hold A) or in boot-time Settings: what UI_EV_START_LINK must send.
+bool screen_gb_mode(const main_screen *m);
 
 // The pairing values to send for UI_EV_PAIR (channel, address, packets).
 const u8 *pairing_values(const main_screen *m);

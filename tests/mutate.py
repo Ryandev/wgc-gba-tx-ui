@@ -27,7 +27,8 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DEFAULT = ['src/link.c', 'src/main.c', 'src/screen_main.c', 'src/core/keyword.h', 'src/core/keyword.c',
            'src/core/boot.c', 'src/core/pairing.c', 'src/core/text.c', 'src/core/view.c', 'src/core/lcd.c',
            'src/core/notes.c', 'src/core/splash.c',
-           'src/core/settings.c', 'src/core/canvas.c', 'src/core/zoom.c', 'src/screen_settings.c']
+           'src/core/settings.c', 'src/core/canvas.iwram.c', 'src/core/zoom.c', 'src/core/idle.c',
+           'src/screen_settings.c']
 INFRA = 3      # exit code run_tests.py / visual.py / unit-fast use for infrastructure errors
 NO_BUILD = 200  # unit-fast: host compile failed
 
@@ -98,7 +99,7 @@ ALSO_TESTED_BY = {'canvas': ['lcd']}
 
 def unit_tests_for(path):
     """Unit tests that exercise a mutated file (all of them for a header)."""
-    base = os.path.splitext(os.path.basename(path))[0]
+    base = os.path.splitext(os.path.basename(path))[0].replace('.iwram', '')  # canvas.iwram.c -> canvas
     own = os.path.join('tests', 'unit', f'test_{base}.c')
     if path.endswith('.c') and os.path.exists(os.path.join(ROOT, own)):
         return [own] + [os.path.join('tests', 'unit', f'test_{b}.c') for b in ALSO_TESTED_BY.get(base, [])]

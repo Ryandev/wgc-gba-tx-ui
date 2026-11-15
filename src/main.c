@@ -85,8 +85,8 @@ int main(void)
         VBlankIntrWait();
         // Palette writes first, at the start of VBlank, from the word the send IRQ last sent
         switch (screen_main_frame(&screen, link_last_word, pressed_now())) {
-        case UI_EV_START_LINK:
-            start_link(plan.gb_mode);
+        case UI_EV_START_LINK: // PLAY from boot-time Settings: GB mode as set there (or held A)
+            start_link(screen_gb_mode(&screen));
             break;
         case UI_EV_PAIR: { // sync, then the pairing message; the ATtiny repeats it until power-off
             const u8 *v = pairing_values(&screen);
