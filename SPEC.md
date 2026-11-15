@@ -151,7 +151,7 @@ countdown bar. It all hides after about 3 s from the last L/R press. See `mockup
   EEPROM can't be read back.
 
 ### S. Settings / Stats pages (Phase 1 basic, Phase 2 full)
-- Opened by holding **Start at boot** (as stock), or from the stretch overlay (N) if that's built.
+- Opened by holding **Start at boot** (as stock), or in-session with L+R+Select for 1 s (N).
 - Pages:
   - **Pairing:** the wizard (E)
   - **Display:** screen off, black screen, idle dim (G, K)
@@ -193,6 +193,15 @@ countdown bar. It all hides after about 3 s from the last L/R press. See `mockup
 - Without storage, the hub says "CHANGES LAST UNTIL POWER OFF".
 - The full-screen green-LCD style is in `mockups/19_*`–`23_*`.
 - The stock B-at-boot "key letters" option is dropped, because the live drawing replaces it.
+- **Built (Phase 1 chunk 4):** `src/core/settings.c` (combo, pages), `src/core/zoom.c` (affine zoom,
+  ease-out, 12 frames to 2.6x), `src/core/canvas.c`, `src/screen_settings.c` (pages on BG1, alpha
+  fade, 8 frames), the mode machine in `screen_main.c`, `link_paused` in `link.c`. Pages so far:
+  PLAY, PAIRING, ABOUT (Display, Input, Stats, Help appear when they're built, Phase 2+). In-session
+  PAIRING is read-only and says to power off and hold Start (SPEC §N: pairing needs a power cycle).
+  Boot-time Settings starts zoomed in (no splash, nothing sent); PLAY sends sync (+ GB pair) and
+  zooms out; A on PAIRING sends exactly the stock bytes (03_config). Timing scenario 11_settings
+  proves only neutral words go out while Settings is open. Build-time pairing defaults (F-simple):
+  `-DDEFAULT_CHANNEL= -DDEFAULT_ADDRESS= -DDEFAULT_PACKETS=`.
 
 **Decided 2026-11-14:**
 - "Key held" warning: **off by default**. When enabled the threshold is 60 s.

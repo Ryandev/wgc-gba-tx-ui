@@ -6,7 +6,7 @@
 | Documentation (`*.md`) | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) |
 | libtonc, fetched at build time (`scripts/fetch_deps.sh`) | MIT, © J Vijn |
 | `gba_crt0.s` from devkitPro/devkitarm-crtls, fetched at build time and linked into the ROM | MPL-2.0 (file-level; used unmodified). Source: github.com/devkitPro/devkitarm-crtls @ 1c0c102 |
-| `ld/gba_cart.ld`, adapted from devkitarm-crtls (one-line change, marked in the file) | Public domain (per its header) |
+| `ld/gba_cart.ld`, adapted from devkitarm-crtls (two small changes, marked in the file) | Public domain (per its header) |
 | Press Start 2P font (`assets/fonts/PressStart2P-Regular.ttf`, unmodified) and the ROM's glyphs rendered from it | [SIL Open Font License 1.1](assets/fonts/OFL.txt), © 2012 The Press Start 2P Project Authors (cody@zone38.net), Reserved Font Name "Press Start 2P". Source: github.com/google/fonts `ofl/pressstart2p` |
 | `gbafix` from devkitPro/gba-tools, fetched and built at build time, not part of the ROM | GPL-3.0 |
 

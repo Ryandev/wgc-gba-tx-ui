@@ -1,6 +1,7 @@
 /* wgc-gba-tx-ui: copy of devkitPro/devkitarm-crtls gba_cart.ld @1c0c102 (public domain).
-   Only change: the .iwram output section also matches '.iwram.*' input sections, which libtonc
-   uses for isr_master/memcpy32/memset32 (upstream only matched '.iwram', so they landed in ROM). */
+   Change 1: the .iwram output section also matches '.iwram.*' input sections, which libtonc
+   uses for isr_master/memcpy32/memset32 (upstream only matched '.iwram', so they landed in ROM).
+   Change 2: a '.noinit' input section in EWRAM after __sbss_end__, which crt0 doesn't clear. */
 /* Linker Script Original v1.3 by Jeff Frohwein     */
 /*  v1.0 - Original release                         */
 /*  v1.1 - Added proper .data section support       */
@@ -267,6 +268,10 @@ SECTIONS
  		*(.sbss*)
  		. = ALIGN(4);
 		__sbss_end__  = ABSOLUTE(.);
+		/* wgc-gba-tx-ui change 2: EWRAM data crt0 does NOT clear again (crt0 already zeroes all of
+		   EWRAM at boot; a second clear of a 19 KB canvas pushed the first frame back by one) */
+		*(.noinit*)
+		. = ALIGN(4);
 		__end__ = ABSOLUTE(.);
 		__eheap_start = ABSOLUTE(.);
  	} AT>ewram

@@ -62,7 +62,11 @@ void view_button_colours(const view_state *v, view_button b, bool gb_mode, const
     for (int i = 0; i < 3; i++) out[i] = view_mix(normal[i], lit[i], w);
 }
 
-led_status view_led_status(bool gb_mode, bool caveat) { return gb_mode || caveat ? LED_AMBER : LED_GREEN; }
+led_status view_led_status(bool gb_mode, bool caveat, bool not_sending)
+{
+    if (not_sending) return LED_RED;
+    return gb_mode || caveat ? LED_AMBER : LED_GREEN;
+}
 
 void view_led_colours(led_status s, uint16_t body, uint16_t out[3])
 {

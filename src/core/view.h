@@ -65,9 +65,9 @@ unsigned view_fade_weight(unsigned level);
 void view_button_colours(const view_state *v, view_button b, bool gb_mode, const uint16_t normal[3],
                          uint16_t out[3]);
 
-// LED status from what the cart is doing (§C): GB mode or another caveat (a key held past the
-// limit) = amber, else green. Red is reserved for "not sending" (stretch overlay N).
-led_status view_led_status(bool gb_mode, bool caveat);
+// LED status from what the cart is doing (§C): not sending gameplay input (Settings open, or before
+// PLAY at boot) = red; else GB mode or another caveat (a key held past the limit) = amber; else green.
+led_status view_led_status(bool gb_mode, bool caveat, bool not_sending);
 
 // The 3 palette colours (LED, inner glow ring, outer glow ring) for a status, over the body colour.
 void view_led_colours(led_status s, uint16_t body, uint16_t out[3]);

@@ -122,7 +122,7 @@ def main():
             probs.append(f"pairs {collapsed(o['pairs'])} != stock {collapsed(s['pairs'])}")
         # press-to-send: only keys pressed while input passes through (`lat_keys` limits it for ours-only
         # scenarios, where presses inside Settings are deliberately not sent)
-        lat_keys = [k for k in o_k if sc.get('lat_keys', lambda c: True)(k[1])] if ours_only else o_k
+        lat_keys = [k for k in o_k if k[0] >= sc.get('lat_from_frame', 0)]
         gap, lat, rate = timing(o['pairs'], lat_keys, proto)
         sgap, slat, _ = timing(s['pairs'], s_k, proto)
         if gap > MAX_GAP_MS: probs.append(f'gap {gap:.2f} ms > {MAX_GAP_MS} ms')

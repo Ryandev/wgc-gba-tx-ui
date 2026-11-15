@@ -56,11 +56,17 @@ SCREENS = {
     # frame 9 = first frame after startup; frames 1-7 are white in stock too (crt0 clears RAM under forced
     # blank before main), so they're not a useful golden (see SPEC.md, boot flash note)
     'black':   ['k:sv', 'f:9', 'p:frame9', 'f:21', 'p:frame30'],
-    # frame 7: text setup under forced blank, no garbage backdrop (phase1-chunk1 F1, mutation re-run);
-    # compared by colours only: the white/backdrop boundary's scanline moves with boot timing
-    'pairing': ['k:S', 'f:7', 'p:frame7_colours', 'f:23', 'k:-', 'f:3', 'p:menu', 'k:>', 'f:2', 'k:-', 'f:2', 'k:v', 'f:2', 'k:-', 'f:3',
-                'p:moved', 'k:v', 'f:2', 'k:-', 'f:2', 'k:<', 'f:2', 'k:-', 'f:3', 'p:packets_min',
-                'k:A', 'f:2', 'k:-', 'f:5', 'p:sent'],
+    # Boot-time Settings (Start held, SPEC §S): starts zoomed into the LCD; frame 7 under forced blank
+    # (colours only: the boot boundary moves with code size); home, PAIRING edited, SENT
+    'settings_boot': ['k:S', 'f:7', 'p:frame7_colours', 'f:23', 'k:-', 'f:3', 'p:home', 'k:v', 'f:2', 'k:-', 'f:2',
+                      'k:A', 'f:2', 'k:-', 'f:3', 'p:pairing', 'k:>', 'f:2', 'k:-', 'f:2', 'k:v', 'f:2', 'k:-', 'f:2',
+                      'k:<', 'f:2', 'k:-', 'f:3', 'p:edited', 'k:A', 'f:2', 'k:-', 'f:5', 'p:sent'],
+    # In-session Settings (SPEC §N): hold L+R+Select 1 s; zoom in (LED red from the first frame), the
+    # pages, then out again and back to the controller with the LED green
+    'settings': ['f:200', 'k:lrs', 'f:61', 'p:zoom_start', 'f:5', 'p:zoom_mid', 'k:-', 'f:20', 'p:home',
+                 'k:v', 'f:3', 'k:-', 'f:3', 'k:A', 'f:3', 'k:-', 'f:3', 'p:pairing', 'k:B', 'f:3', 'k:-', 'f:3',
+                 'k:v', 'f:3', 'k:-', 'f:3', 'k:A', 'f:3', 'k:-', 'f:3', 'p:about', 'k:B', 'f:3', 'k:-', 'f:3',
+                 'k:B', 'f:3', 'k:-', 'f:4', 'p:fade_out', 'f:10', 'p:zoom_out', 'f:20', 'p:back'],
 }
 
 

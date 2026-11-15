@@ -25,14 +25,14 @@ SCENARIOS = {
                           note='stock B-at-boot key letters dropped; bytes identical'),
     # Pairing with three distinct values (7, 4, 2) so swapped arguments can't pass (chunk2 F4), and a
     # B press afterwards: nothing may be sent after the pairing message (chunk2 F8).
-    '03_config':     dict(ours=['k:S', 'f:60', 'k:-', 'f:10'] + TAP('>') * 6 + TAP('v') + TAP('>') * 3 + TAP('v')
+    '03_config':     dict(ours=['k:S', 'f:60', 'k:-', 'f:10'] + TAP('v') + TAP('A') + TAP('>') * 6 + TAP('v') + TAP('>') * 3 + TAP('v')
                            + TAP('>') + ['k:A', 'f:20', 'k:-', 'f:10', 'k:B', 'f:10', 'k:-', 'f:20'],
                           stock=['k:S', 'f:60', 'k:-', 'f:10', 'k:>', 'f:20', 'k:-', 'f:10', 'k:>', 'f:20', 'k:-',
                                  'f:10', 'k:v', 'f:3', 'k:-', 'f:20', 'k:>', 'f:20', 'k:-', 'f:20', 'k:v', 'f:3',
                                  'k:-', 'f:20', 'k:>', 'f:3', 'k:-', 'f:20', 'k:A', 'f:20', 'k:-', 'f:10', 'k:B',
                                  'f:10', 'k:-', 'f:20'],
                           sync_after_a=True,  # SPEC §S: boot-time Settings sends nothing until A (pairing)
-                          note='pairs CH 7 / ADDR 4 / PKTS 2 (stock via auto-repeat, ours via taps), then B: no sends'),
+                          note='pairs CH 7 / ADDR 4 / PKTS 2 (stock via auto-repeat, ours via Settings > PAIRING), then B: no sends'),
     '04_screen_off': dict(ours=['k:s', 'f:60', 'k:-', 'f:5', 'k:A', 'f:5']),
     '05_black':      dict(ours=['k:sv', 'f:60', 'k:-', 'f:5']),
     '06_gbmode':     dict(ours=['k:A', 'f:60', 'k:-', 'f:5']),
@@ -48,6 +48,13 @@ SCENARIOS = {
     # checks cover every splash phase (review phase1-chunk3 F3)
     '10_splash_full': dict(ours=['f:200', 'k:A', 'f:5', 'k:-', 'f:5', 'k:^B', 'f:5', 'k:-', 'f:5'],
                            note='splash runs to the end (fade, power, title, tip), then keys'),
+    # In-session Settings (SPEC §N): hold L+R+Select 1 s; from then on only neutral words while the menu
+    # is used (Down, A into PAIRING, B, Down, A into ABOUT, B, B to play); after the zoom back out,
+    # keys pass through again. Ours only: stock has no such overlay, so it's checked against `expect`.
+    '11_settings':   dict(ours=['f:200', 'k:lrs', 'f:70', 'k:-', 'f:25'] + TAP('v') + TAP('A') + TAP('B') + TAP('v')
+                          + TAP('A') + TAP('B') + TAP('B') + ['f:30', 'k:^', 'f:5', 'k:-', 'f:5'],
+                          expect=[0, 0x304, 0, 0x40, 0], pre={'v1.1a': (0x49,), 'v1.1b': (0x29,)},
+                          lat_from_frame=380, note='Settings open: only neutral words; pass-through after'),
     '07_xy':         dict(ours=['f:30', 'k:lrA', 'f:5', 'k:lrB', 'f:5', 'k:lrAB', 'f:5', 'k:-', 'f:5'],
                           note='L+R+A/B -> X/Y on v1.1b; plain L+R+A/B on v1.1a'),
 }

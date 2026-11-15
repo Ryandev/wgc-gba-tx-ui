@@ -2,6 +2,9 @@
 #include <tonc.h>
 #include "assets.h"
 #include "core/lcd.h"
+#include "core/zoom.h"
+#include "link.h"
+#include "screen_settings.h"
 #include "version.h"
 #include "ctrl.h" // generated from assets/controller.svg (tools/svg_to_gba.py)
 
@@ -115,41 +118,60 @@ static void lcd_bar_update(unsigned left)
              (u32)(count * LCD_ROW_WORDS));
 }
 
-void screen_main_init(main_screen *m, bool gb_mode, uint32_t held_limit, u16 held_word)
+// The zoom into the drawn LCD (SPEC §S): BG2's affine parameters for step k (0 = normal view).
+static void set_zoom(int k)
+{
+    const zoom_params p = zoom_at(k, (SCREEN_WIDTH / 2 - CTRL_X) << 8, (SCREEN_HEIGHT / 2 - CTRL_Y) << 8,
+                                  (CTRL_LCD_X0 + CTRL_LCD_X1 + 1) << 7, (CTRL_LCD_Y0 + CTRL_LCD_Y1 + 1) << 7);
+    REG_BG2PA = (s16)p.pa;
+    REG_BG2PD = (s16)p.pa;
+    REG_BG2X = p.x;
+    REG_BG2Y = p.y;
+}
+
+void screen_main_init(main_screen *m, const screen_main_config *cfg)
 {
     // Forced blank while loading, so no half-loaded or garbage frame is ever shown (real VRAM and
     // palette RAM aren't zeroed at boot). Review phase1-chunk1 F1: clearing the blank first showed
     // garbage backdrop and a torn picture on boot frame 7.
     REG_DISPCNT = DCNT_MODE1 | DCNT_BLANK;
     view_init(&m->view);
-    notes_init(&m->notes, gb_mode, held_limit);
-    splash_init(&m->splash, held_word);
-    m->splash_on = true;
+    notes_init(&m->notes, cfg->gb_mode, cfg->held_limit);
+    splash_init(&m->splash, cfg->held_word);
+    combo_init(&m->combo);
+    settings_init(&m->set, true, cfg->channel, cfg->address, cfg->packets, cfg->held_keys);
+    settings_set_assumed(cfg->channel, cfg->address, cfg->packets);
+    m->splash_on = !cfg->boot_settings; // boot-time Settings: no splash, nothing sent (SPEC §S)
     m->faded = false; // mutate: equivalent[false -> true] (the first frame is a fade frame: sets it anyway)
     m->shown = PAGE_NONE;
     m->show_pending =
         false; // mutate: equivalent[false -> true] (only read once a note is shown, after it's set)
+    m->sending = !cfg->boot_settings;
+    m->copy_pending = false;
+    m->mode = cfg->boot_settings ? UI_FADE_IN : UI_MAIN;
+    m->step = 0;
     memcpy32(&tile8_mem[CBB_CTRL][0], ctrl_tiles, sizeof ctrl_tiles / 4);
-    // mutate: equivalent[dec const +1] at 1:1 the map rows a shorter copy misses (>= 26) are never on
-    // screen (the picture is 17 rows); the Settings zoom (Phase 1 chunk 4) must re-check this.
-    memcpy32(se_mem[SBB_CTRL], ctrl_map, sizeof ctrl_map / 4); // mutate: equivalent[dec const +1] (above)
+    memcpy32(se_mem[SBB_CTRL], ctrl_map, sizeof ctrl_map / 4);
     memcpy16(pal_bg_mem, ctrl_pal, CTRL_PAL_LEN);
     pal_bg_mem[0] = BACKDROP;
     REG_BG2CNT = BG_CBB(CBB_CTRL) | BG_SBB(SBB_CTRL) | BG_AFF_32x32 |
                  BG_PRIO(1); // mutate: equivalent[dec const +1] (2 is still under BG0)
-    // Identity transform; the reference point puts the picture's top left at (CTRL_X, CTRL_Y).
-    REG_BG2PA = 1 << 8;
     REG_BG2PB = 0; // mutate: equivalent[0 -> 1] (a 1/256 px shear: < 1 px over 160 lines, never shows)
     REG_BG2PC = 0; // mutate: equivalent[0 -> 1] (same, vertically over 240 columns)
-    REG_BG2PD = 1 << 8;
-    REG_BG2X = -(CTRL_X << 8);
-    REG_BG2Y = -(CTRL_Y << 8);
+    set_zoom(cfg->boot_settings ? ZOOM_FRAMES : 0); // boot-time Settings start zoomed into the LCD
     lcd_layer_init();
-    screen_main_frame(m, held_word); // colours for the first visible frame (the splash's blank one)
+    if (cfg->boot_settings) {
+        // The Settings layer is set up only when Settings opens: at boot its map fill would push the
+        // first frame of the splash back by a frame (found by the boot__frame8 golden)
+        settings_layer_init();
+        settings_draw(&m->set);
+        settings_copy();
+    }
+    screen_main_frame(m, cfg->held_word, cfg->held_keys); // colours for the first visible frame
     // Enable in VBlank: the affine reference point is latched at VBlank, so writing it mid-frame
     // would shift the rest of that frame (F1).
     VBlankIntrWait();
-    REG_DISPCNT = DCNT_MODE1 | DCNT_BG2;
+    REG_DISPCNT = (u16)(DCNT_MODE1 | DCNT_BG2 | (REG_DISPCNT & DCNT_BG1));
 }
 
 // The splash's FADE frames: every colour from the drawing's base palette, LED off and LCD dark,
@@ -165,9 +187,139 @@ static void palette_faded(unsigned weight)
     }
 }
 
-void screen_main_frame(main_screen *m, u16 word)
+// Main-screen palette: buttons, the splash's hints, strike lines and the LED (SPEC §A, §B, §C).
+static void palette_main(main_screen *m, splash_phase sp)
 {
     const bool gb_mode = m->notes.gb_mode;
+    if (m->faded) { // first frame after the fade: back to the drawing's own colours
+        memcpy16(pal_bg_mem, ctrl_pal, CTRL_PAL_LEN);
+        pal_bg_mem[0] = BACKDROP;
+        m->faded = false; // mutate: equivalent[false -> true] (restoring again each frame looks the same)
+    }
+    for (int b = 0; b < VIEW_BUTTONS; b++) {
+        u16 normal[3]; // mutate: equivalent[dec const +1] (larger array)
+        for (int i = 0; i < 3; i++) normal[i] = ctrl_pal[entries[b][i]];
+        u16 out[3]; // mutate: equivalent[dec const +1] (larger array)
+        view_button_colours(&m->view, (view_button)b, gb_mode, normal, out);
+        for (int i = 0; i < 3; i++) pal_bg_mem[entries[b][i]] = out[i];
+    }
+    if (sp == SPLASH_TIP) { // the tip's buttons, lit as if pressed (storyboard frame 4)
+        static const view_button hint[] = {VB_L, VB_R, VB_SELECT};
+        // clang-format off
+        for (unsigned h = 0; h < sizeof hint / sizeof hint[0]; h++) { // mutate: equivalent[0 -> 1] (sizeof hint[1] == sizeof hint[0])
+            // clang-format on
+            pal_bg_mem[entries[hint[h]][0]] = VIEW_LIT;
+            pal_bg_mem[entries[hint[h]][1]] = VIEW_LIT_HI;
+            pal_bg_mem[entries[hint[h]][2]] = VIEW_LIT_LO;
+        }
+    }
+    // The strike lines take their shoulder's current fill (invisible), or amber when struck (§C)
+    const bool strike = notes_strike(&m->notes);
+    pal_bg_mem[CTRL_STRIKE_L] = strike ? VIEW_WARN : pal_bg_mem[CTRL_SHOULDER_L];
+    pal_bg_mem[CTRL_STRIKE_R] = strike ? VIEW_WARN : pal_bg_mem[CTRL_SHOULDER_R];
+    // Red while gameplay input isn't sent: Settings open, or boot-time Settings before PLAY (§C, §S)
+    const bool not_sending = !m->sending || m->mode != UI_MAIN;
+    u16 led[3]; // mutate: equivalent[dec const +1] (larger array)
+    view_led_colours(view_led_status(gb_mode, notes_key_held(&m->notes), not_sending), ctrl_pal[CTRL_BODY],
+                     led);
+    pal_bg_mem[CTRL_LED] = led[0];
+    pal_bg_mem[CTRL_LED_GLOW1] = led[1];
+    pal_bg_mem[CTRL_LED_GLOW2] = led[2];
+}
+
+// The LCD notes layer (BG0): a splash page while the splash runs, else the current note; nothing
+// while zoomed (it's placed for the normal view).
+static void lcd_layer(main_screen *m, splash_phase sp)
+{
+    const int now = m->mode == UI_MAIN ? page_now(sp, &m->notes) : PAGE_NONE;
+    if (now != m->shown) {
+        REG_DISPCNT &= (u16)~DCNT_BG0; // still in VBlank: hidden from this frame on
+        m->shown = now;
+        m->show_pending = now != PAGE_NONE;
+        if (m->show_pending) lcd_render(now); // can take longer than VBlank: the layer is hidden
+    } else if (now != PAGE_NONE) {
+        if (m->show_pending) {
+            REG_DISPCNT |= DCNT_BG0;
+            m->show_pending =
+                false; // mutate: equivalent[false -> true] (re-enabling a shown layer changes nothing)
+        }
+        // clang-format off
+        if (now < PAGE_TITLE) lcd_bar_update(notes_left(&m->notes)); // mutate: equivalent[< -> <=] (an empty bar on the title page: its bottom rows are blank)
+        // clang-format on
+    }
+}
+
+#define FADE_STEP 2 // text fade: 0..16 in 8 frames
+
+// Settings modes: zoom in, fade in, the pages, fade out, zoom out (SPEC §S, mockups/33_*)
+static ui_event settings_modes(main_screen *m, u16 keys)
+{
+    ui_event ev = UI_EV_NONE;
+    switch (m->mode) {
+    case UI_ZOOM_IN:
+        set_zoom(++m->step);
+        if (m->step == ZOOM_FRAMES) {
+            settings_draw(&m->set); // the text layer is hidden: drawn and copied before fading in
+            settings_copy();
+            m->mode = UI_FADE_IN;
+            m->step = 0;
+        }
+        break;
+    case UI_FADE_IN:
+        m->step += FADE_STEP;
+        settings_fade(m->step);
+        if (m->step >= 16) m->mode = UI_SETTINGS;
+        break;
+    case UI_SETTINGS:
+        if (m->copy_pending) { // redrawn last frame: copy now, at the start of VBlank
+            settings_copy();
+            m->copy_pending = false;
+        }
+        switch (settings_step(&m->set, keys)) {
+        case SET_PLAY:
+            if (!m->sending) { // boot-time Settings: the link starts now (sync first, SPEC §S)
+                ev = UI_EV_START_LINK;
+                m->sending = true;
+            }
+            m->mode = UI_FADE_OUT;
+            m->step = 16;
+            break;
+        case SET_SEND:
+            ev = UI_EV_PAIR;
+            settings_draw(&m->set); // the SENT page
+            m->copy_pending = true;
+            break;
+        case SET_REDRAW:
+            settings_draw(&m->set);
+            m->copy_pending = true;
+            break;
+        default:
+            break;
+        }
+        break;
+    case UI_FADE_OUT:
+        m->step -= FADE_STEP;
+        settings_fade(m->step);
+        if (m->step <= 0) {
+            m->mode = UI_ZOOM_OUT;
+            m->step = ZOOM_FRAMES;
+        }
+        break;
+    case UI_ZOOM_OUT:
+        set_zoom(--m->step);
+        if (m->step == 0) {
+            m->mode = UI_MAIN;
+            link_paused = false; // gameplay input passes through again
+        }
+        break;
+    default:
+        break;
+    }
+    return ev;
+}
+
+ui_event screen_main_frame(main_screen *m, u16 word, u16 keys)
+{
     splash_phase sp = SPLASH_DONE;
     if (m->splash_on) {
         sp = splash_step(&m->splash, word);
@@ -185,54 +337,28 @@ void screen_main_frame(main_screen *m, u16 word)
         palette_faded(splash_fade_weight(&m->splash));
         m->faded = true;
     } else {
-        if (m->faded) { // first frame after the fade: back to the drawing's own colours
-            memcpy16(pal_bg_mem, ctrl_pal, CTRL_PAL_LEN);
-            pal_bg_mem[0] = BACKDROP;
-            m->faded = false; // mutate: equivalent[false -> true] (restoring again each frame looks the same)
-        }
-        for (int b = 0; b < VIEW_BUTTONS; b++) {
-            u16 normal[3]; // mutate: equivalent[dec const +1] (larger array)
-            for (int i = 0; i < 3; i++) normal[i] = ctrl_pal[entries[b][i]];
-            u16 out[3]; // mutate: equivalent[dec const +1] (larger array)
-            view_button_colours(&m->view, (view_button)b, gb_mode, normal, out);
-            for (int i = 0; i < 3; i++) pal_bg_mem[entries[b][i]] = out[i];
-        }
-        if (sp == SPLASH_TIP) { // the tip's buttons, lit as if pressed (storyboard frame 4)
-            static const view_button hint[] = {VB_L, VB_R, VB_SELECT};
-            // clang-format off
-            for (unsigned h = 0; h < sizeof hint / sizeof hint[0]; h++) { // mutate: equivalent[0 -> 1] (sizeof hint[1] == sizeof hint[0])
-                // clang-format on
-                pal_bg_mem[entries[hint[h]][0]] = VIEW_LIT;
-                pal_bg_mem[entries[hint[h]][1]] = VIEW_LIT_HI;
-                pal_bg_mem[entries[hint[h]][2]] = VIEW_LIT_LO;
-            }
-        }
-        // The strike lines take their shoulder's current fill (invisible), or amber when struck (§C)
-        const bool strike = notes_strike(&m->notes);
-        pal_bg_mem[CTRL_STRIKE_L] = strike ? VIEW_WARN : pal_bg_mem[CTRL_SHOULDER_L];
-        pal_bg_mem[CTRL_STRIKE_R] = strike ? VIEW_WARN : pal_bg_mem[CTRL_SHOULDER_R];
-        u16 led[3]; // mutate: equivalent[dec const +1] (larger array)
-        view_led_colours(view_led_status(gb_mode, notes_key_held(&m->notes)), ctrl_pal[CTRL_BODY], led);
-        pal_bg_mem[CTRL_LED] = led[0];
-        pal_bg_mem[CTRL_LED_GLOW1] = led[1];
-        pal_bg_mem[CTRL_LED_GLOW2] = led[2];
+        palette_main(m, sp);
     }
 
-    // 2. The LCD layer: a splash page while the splash runs, else the current note
-    const int now = page_now(sp, &m->notes);
-    if (now != m->shown) {
-        REG_DISPCNT &= (u16)~DCNT_BG0; // still in VBlank: hidden from this frame on
-        m->shown = now;
-        m->show_pending = now != PAGE_NONE;
-        if (m->show_pending) lcd_render(now); // can take longer than VBlank: the layer is hidden
-    } else if (now != PAGE_NONE) {
-        if (m->show_pending) {
-            REG_DISPCNT |= DCNT_BG0;
-            m->show_pending =
-                false; // mutate: equivalent[false -> true] (re-enabling a shown layer changes nothing)
+    // 2. In-session Settings: hold L + R + Select for 1 s (SPEC §N). From the frame it fires the
+    // cart sends neutral (the LED turns red), and the zoom starts.
+    ui_event ev = UI_EV_NONE;
+    if (m->mode == UI_MAIN) {
+        if (m->sending && !m->splash_on && combo_step(&m->combo, keys)) {
+            link_paused = true;
+            settings_layer_init(); // main loop work (the send IRQ preempts it); the layer stays hidden
+            settings_init(&m->set, false, m->set.pair.val[PAIR_CHANNEL], m->set.pair.val[PAIR_ADDRESS],
+                          m->set.pair.val[PAIR_PACKETS], keys);
+            m->mode = UI_ZOOM_IN;
+            m->step = 0;
         }
-        // clang-format off
-        if (now < PAGE_TITLE) lcd_bar_update(notes_left(&m->notes)); // mutate: equivalent[< -> <=] (an empty bar on the title page: its bottom rows are blank)
-        // clang-format on
+    } else {
+        ev = settings_modes(m, keys);
     }
+
+    // 3. The LCD notes layer
+    lcd_layer(m, sp);
+    return ev;
 }
+
+const u8 *pairing_values(const main_screen *m) { return m->set.pair.val; }

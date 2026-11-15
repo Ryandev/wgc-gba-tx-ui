@@ -160,10 +160,12 @@ static void test_gb_mode_shoulders_are_flat_amber_others_normal_lit(void)
 
 static void test_led_status(void)
 {
-    TEST_ASSERT_EQUAL(LED_GREEN, view_led_status(false, false));
-    TEST_ASSERT_EQUAL(LED_AMBER, view_led_status(true, false));
-    TEST_ASSERT_EQUAL(LED_AMBER, view_led_status(false, true)); // key held past the limit
-    TEST_ASSERT_EQUAL(LED_AMBER, view_led_status(true, true));
+    TEST_ASSERT_EQUAL(LED_GREEN, view_led_status(false, false, false));
+    TEST_ASSERT_EQUAL(LED_AMBER, view_led_status(true, false, false));
+    TEST_ASSERT_EQUAL(LED_AMBER, view_led_status(false, true, false)); // key held past the limit
+    TEST_ASSERT_EQUAL(LED_AMBER, view_led_status(true, true, false));
+    TEST_ASSERT_EQUAL(LED_RED, view_led_status(false, false, true)); // not sending wins over all
+    TEST_ASSERT_EQUAL(LED_RED, view_led_status(true, true, true));
 }
 
 static void test_led_colours_and_glow(void)

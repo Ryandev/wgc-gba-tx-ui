@@ -39,8 +39,8 @@ GitHub at pinned commits by `scripts/fetch_deps.sh`.
 | `reference/` | Vendor manual PDF, stock ROMs v1.1a/v1.1b (with SHA-256), board photos and rumble-mod schematic |
 | `SPEC.md` | **What we're building**: features A–R, ground rules, phases 0–4, ruled-out ideas |
 | `FEATURES.md` | Every stock screen (emulator screenshots), the verified byte log, and a feature menu for the new UI |
-| `src/` | ROM hardware layer: `link_write.s` (bus-faithful cart write), `link.c` (2 ms timer IRQ), `main.c` (boot, screens), `screen_main.c` (controller view: drawing on BG2, buttons and LED lit by palette writes) |
-| `src/core/` | Pure logic, no hardware (host-tested): key packing and protocol bytes, boot holds, pairing menu, text, controller view (lighting, release fade, LED colours), LCD notes (timers, text and countdown bar canvas), boot splash (phases, skip) |
+| `src/` | ROM hardware layer: `link_write.s` (bus-faithful cart write), `link.c` (2 ms timer IRQ), `main.c` (boot, screens), `screen_main.c` (controller view: drawing on BG2, buttons and LED lit by palette writes; splash, notes, Settings zoom), `screen_settings.c` (Settings pages on BG1) |
+| `src/core/` | Pure logic, no hardware (host-tested): key packing and protocol bytes, boot holds, pairing menu, text, controller view (lighting, release fade, LED colours), LCD notes (timers, text and countdown bar canvas), boot splash (phases, skip), Settings (combo, pages), zoom, generic 4bpp canvas |
 | `tests/unit/` | Unity unit tests of `src/core`, run for both protocols (`make unit`, `make coverage`) |
 | `tests/run_tests.py` | Regression test against the stock ROM's recorded cart writes |
 | `tools/disasm_thumb.py` | Small Capstone disassembler used for the reverse engineering |
