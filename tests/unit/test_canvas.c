@@ -57,7 +57,7 @@ static void test_pixel_layout_any_width(void)
     canvas_pixel(&c, 8, 0, 3); // tile 1
     TEST_ASSERT_EQUAL_HEX32(0x3, mem.w[8]);
     canvas_pixel(&c, 0, 8, 4); // tile row 1 = tile TW
-    TEST_ASSERT_EQUAL_HEX32(0x4, mem.w[TW * 8]);
+    TEST_ASSERT_EQUAL_HEX32(0x4, mem.w[(size_t)TW * 8]);
     canvas_pixel(&c, TW * 8, 0, 1); // outside
     canvas_pixel(&c, 0, TH * 8, 1);
     canvas_pixel(&c, -1, 0, 1);
