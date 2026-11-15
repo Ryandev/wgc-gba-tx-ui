@@ -211,6 +211,9 @@ past the canvas, the bar's tile-row maths only worked for today's LCD height, an
 checked straight after init. All fixed with tests; `lcd.c` then 134/134. Two map-clear mutants are
 *accepted* (invisible with today's notes and no sprites, stated in place).
 
+**Phase 1 chunk 3 (2026-11-15):** after the review fixes, 329/330 on the chunk's files; the survivor
+(an empty bar redrawn on a blank title page) is annotated equivalent.
+
 **Colour-only captures.** A capture named `*_colours` (e.g. `pairing__frame7_colours`) is compared by
 the set of colours it contains, not pixel by pixel. It's for boot transition frames, where the
 scanline at which startup finishes moves with code size, but what matters is that no garbage

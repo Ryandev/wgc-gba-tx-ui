@@ -115,7 +115,7 @@ static void lcd_bar_update(unsigned left)
              (u32)(count * LCD_ROW_WORDS));
 }
 
-void screen_main_init(main_screen *m, bool gb_mode, uint32_t held_limit, bool splash, u16 held_word)
+void screen_main_init(main_screen *m, bool gb_mode, uint32_t held_limit, u16 held_word)
 {
     // Forced blank while loading, so no half-loaded or garbage frame is ever shown (real VRAM and
     // palette RAM aren't zeroed at boot). Review phase1-chunk1 F1: clearing the blank first showed
@@ -124,8 +124,8 @@ void screen_main_init(main_screen *m, bool gb_mode, uint32_t held_limit, bool sp
     view_init(&m->view);
     notes_init(&m->notes, gb_mode, held_limit);
     splash_init(&m->splash, held_word);
-    m->splash_on = splash;
-    m->faded = false;
+    m->splash_on = true;
+    m->faded = false; // mutate: equivalent[false -> true] (the first frame is a fade frame: sets it anyway)
     m->shown = PAGE_NONE;
     m->show_pending =
         false; // mutate: equivalent[false -> true] (only read once a note is shown, after it's set)
@@ -173,8 +173,12 @@ void screen_main_frame(main_screen *m, u16 word)
         sp = splash_step(&m->splash, word);
         m->splash_on = sp != SPLASH_DONE;
     }
-    view_step(&m->view, word);
-    notes_step(&m->notes, word);
+    // While the splash runs, keys held from boot neither light nor start notes (review phase1-chunk3
+    // F1: GB mode's held A lit cyan on the splash, A+L drew strikes over it); a new press ends the
+    // splash in this same call (sp == SPLASH_DONE), so it still lights at once.
+    const u16 shown_word = sp == SPLASH_DONE ? word : 0;
+    view_step(&m->view, shown_word);
+    notes_step(&m->notes, shown_word);
 
     // 1. Palette writes (we're at the start of VBlank)
     if (sp == SPLASH_FADE) {
@@ -182,8 +186,9 @@ void screen_main_frame(main_screen *m, u16 word)
         m->faded = true;
     } else {
         if (m->faded) { // first frame after the fade: back to the drawing's own colours
-            memcpy16(&pal_bg_mem[1], &ctrl_pal[1], CTRL_PAL_LEN - 1);
-            m->faded = false;
+            memcpy16(pal_bg_mem, ctrl_pal, CTRL_PAL_LEN);
+            pal_bg_mem[0] = BACKDROP;
+            m->faded = false; // mutate: equivalent[false -> true] (restoring again each frame looks the same)
         }
         for (int b = 0; b < VIEW_BUTTONS; b++) {
             u16 normal[3]; // mutate: equivalent[dec const +1] (larger array)
@@ -194,7 +199,9 @@ void screen_main_frame(main_screen *m, u16 word)
         }
         if (sp == SPLASH_TIP) { // the tip's buttons, lit as if pressed (storyboard frame 4)
             static const view_button hint[] = {VB_L, VB_R, VB_SELECT};
-            for (unsigned h = 0; h < sizeof hint / sizeof hint[0]; h++) {
+            // clang-format off
+            for (unsigned h = 0; h < sizeof hint / sizeof hint[0]; h++) { // mutate: equivalent[0 -> 1] (sizeof hint[1] == sizeof hint[0])
+                // clang-format on
                 pal_bg_mem[entries[hint[h]][0]] = VIEW_LIT;
                 pal_bg_mem[entries[hint[h]][1]] = VIEW_LIT_HI;
                 pal_bg_mem[entries[hint[h]][2]] = VIEW_LIT_LO;
@@ -224,6 +231,8 @@ void screen_main_frame(main_screen *m, u16 word)
             m->show_pending =
                 false; // mutate: equivalent[false -> true] (re-enabling a shown layer changes nothing)
         }
-        if (now != PAGE_TITLE && now != PAGE_TIP) lcd_bar_update(notes_left(&m->notes));
+        // clang-format off
+        if (now < PAGE_TITLE) lcd_bar_update(notes_left(&m->notes)); // mutate: equivalent[< -> <=] (an empty bar on the title page: its bottom rows are blank)
+        // clang-format on
     }
 }

@@ -44,6 +44,10 @@ SCENARIOS = {
     '09_gbmode_lr':  dict(ours=['k:A', 'f:60', 'k:-', 'f:5', 'k:l', 'f:2', 'k:lB', 'f:3', 'k:-', 'f:3', 'k:r', 'f:5',
                                 'k:rA', 'f:3', 'k:-', 'f:200', 'k:^', 'f:3', 'k:-', 'f:5'],
                           note='GB mode, L/R tapped: note render + countdown + hide during key traffic'),
+    # The whole splash unskipped (title and tip pages render, antenna included), then keys: the timing
+    # checks cover every splash phase (review phase1-chunk3 F3)
+    '10_splash_full': dict(ours=['f:200', 'k:A', 'f:5', 'k:-', 'f:5', 'k:^B', 'f:5', 'k:-', 'f:5'],
+                           note='splash runs to the end (fade, power, title, tip), then keys'),
     '07_xy':         dict(ours=['f:30', 'k:lrA', 'f:5', 'k:lrB', 'f:5', 'k:lrAB', 'f:5', 'k:-', 'f:5'],
                           note='L+R+A/B -> X/Y on v1.1b; plain L+R+A/B on v1.1a'),
 }

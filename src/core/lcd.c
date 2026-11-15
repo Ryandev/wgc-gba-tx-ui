@@ -63,11 +63,15 @@ void lcd_antenna(uint32_t canvas[LCD_WORDS], int cx, int cy, unsigned ink)
     // The approved mockup's icon (mockups/30_splash_3_title_v2.png, rows 43..60, columns 112..129),
     // pixel for pixel: 18 x 18, bit i of a row = column i. Its mast is columns 8-9 from row 11 down;
     // the 4 x 3 tip is rows 8..10. (Recomputing Pillow's arc maths gave 1-pixel differences.)
-    static const uint32_t icon[18] = {0x00FC0, 0x03030, 0x0C00C, 0x10002, 0x10782, 0x21861,
-                                      0x22011, 0x04008, 0x00780, 0x00780, 0x00780, 0x00300,
-                                      0x00300, 0x00300, 0x00300, 0x00300, 0x00300, 0x00300};
+    // clang-format off
+    static const uint32_t icon[18] = { // mutate: equivalent[dec const +1] (larger array)
+        0x00FC0, 0x03030, 0x0C00C, 0x10002, 0x10782, 0x21861, 0x22011, 0x04008, 0x00780,
+        0x00780, 0x00780, 0x00300, 0x00300, 0x00300, 0x00300, 0x00300, 0x00300, 0x00300};
+    // clang-format on
     for (int y = 0; y < 18; y++) {
-        for (int x = 0; x < 18; x++) {
+        // clang-format off
+        for (int x = 0; x < 18; x++) { // mutate: equivalent[< -> <=, dec const +1] (bits 18+ of every row are 0)
+            // clang-format on
             if (icon[y] & (1u << x)) lcd_pixel(canvas, cx - 8 + x, cy - 9 + y, ink);
         }
     }

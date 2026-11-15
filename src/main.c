@@ -92,7 +92,8 @@ int main(void)
     irq_add(II_VBLANK, NULL);
 
     // Read the boot holds BEFORE anything goes on the bus (SPEC.md §S boot order).
-    boot_plan plan = boot_decide(pressed_now());
+    const u16 boot_keys = pressed_now(); // one snapshot for every boot decision (phase1-chunk3 F5)
+    boot_plan plan = boot_decide(boot_keys);
     main_screen screen;
 
     if (plan.screen == SCREEN_BLACK) {
@@ -115,7 +116,7 @@ int main(void)
         pairing_menu(); // never returns
     } else {
         // bulk VRAM load before key traffic; the splash then runs while keys are already sent (SPEC §B)
-        screen_main_init(&screen, plan.gb_mode, HELD_WARN_FRAMES, true, kw_pack(pressed_now(), link_xy));
+        screen_main_init(&screen, plan.gb_mode, HELD_WARN_FRAMES, kw_pack(boot_keys, link_xy));
     }
 
     link_sync();

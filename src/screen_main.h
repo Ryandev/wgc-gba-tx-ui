@@ -17,13 +17,12 @@ typedef struct {
     bool show_pending; // rendered while hidden; show it at the next frame's start
 } main_screen;
 
-// Load the drawing (tiles, map, palette) and the LCD text layer, and show it from the next frame:
-// the splash's first (blank) frame if `splash`, else the drawing with the LED and button colours
-// already right for `gb_mode`. Bulk VRAM copies under forced blank: call before link_start() or
-// behind a transition, never during play (SPEC §0 rule 7). Waits for one VBlank.
-// held_limit: key-held warning in frames, 0 = off (SPEC §C default). held_word: the key word held at
-// boot (it doesn't skip the splash).
-void screen_main_init(main_screen *m, bool gb_mode, uint32_t held_limit, bool splash, u16 held_word);
+// Load the drawing (tiles, map, palette) and the LCD text layer, and start the boot splash: its
+// first (blank) frame shows from the next frame. Bulk VRAM copies under forced blank: call before
+// link_start() or behind a transition, never during play (SPEC §0 rule 7). Waits for one VBlank. held_limit:
+// key-held warning in frames, 0 = off (SPEC §C default). held_word: the key word held at boot (it doesn't
+// skip the splash).
+void screen_main_init(main_screen *m, bool gb_mode, uint32_t held_limit, u16 held_word);
 
 // Once per frame, straight after VBlank, with the key word the send IRQ last sent. Palette writes
 // and at most two tile rows of the LCD layer (the countdown bar); a new note is rendered with the
