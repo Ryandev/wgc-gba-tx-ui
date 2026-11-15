@@ -126,7 +126,7 @@ CI job (main / manual, ~45-60 min). History, kept honest:
 - **Current (2026-11-14): 248/248 valid mutants killed (100%)**: 194 unit, 18 emulator, 36 visual;
   19 invalid (don't compile for ARM), 1 accepted (`tte_set_pos` x-offset, Phase 0 text only).
 
-Mull (host, LLVM IR) still needs the owner to install it (`/tmp/gba-mull.sh`, checksum-verified).
+Mull (host, LLVM IR) is optional: `scripts/install_mull.sh` installs it (checksum-verified).
 
 Options for C:
 - **Mull** (LLVM-based, actively maintained): mutates at IR level, needs Clang. Fits the **host

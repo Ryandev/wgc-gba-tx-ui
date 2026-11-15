@@ -12,6 +12,19 @@ up on the Pi 4 / RetroArch as a USB HID joystick.
 **Goal:** replace the plain text-console UI on the cart with something more interesting, without
 breaking the wireless link.
 
+## Setup (a fresh machine)
+Ubuntu 24.04 (native or WSL):
+```
+git clone https://github.com/Ryandev/wgc-gba-tx-ui.git && cd wgc-gba-tx-ui
+bash scripts/setup_ubuntu.sh          # packages (sudo), pinned sources, first build, git hooks
+bash scripts/setup_ubuntu.sh --check  # later: check a machine without changing it
+make check                            # the full test suite
+```
+Why not devkitPro: its servers Cloudflare-block some networks, so the toolchain is Ubuntu's
+`gcc-arm-none-eabi` + newlib, and libtonc / the GBA crt0 / gbafix are built from GitHub at pinned commits
+(`scripts/fetch_deps.sh`). The stock ROMs for `make baselines` aren't in the repo (see FLASHING.md);
+the recorded baselines are. Optional: `scripts/install_mull.sh` (Mull, not needed).
+
 ## Build
 ```
 make                 # ROM for v1.1a carts -> build/wgc-gba-tx-ui.gba   (PROTOCOL=V11B for 2023+ carts)
