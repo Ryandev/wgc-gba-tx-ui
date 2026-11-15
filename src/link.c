@@ -5,6 +5,7 @@
 
 volatile u16 link_last_word;
 volatile u32 link_packets;
+volatile bool link_paused; // Settings open: send neutral (SPEC §N input ownership)
 bool link_xy = PROTO_XY_DEFAULT;
 
 void link_sync(void) { link_write(PROTO_SYNC); }
@@ -26,7 +27,9 @@ void link_pair(u8 channel, u8 address, u8 packets)
 // Timer-3 IRQ, about every 2 ms: read the pad, send one key word as two writes.
 static void link_tick(void)
 {
-    u16 w = kw_pack((u16)(~REG_KEYINPUT & K_ALL), link_xy);
+    // Paused (Settings open): neutral words keep going out, so the receiver sees "no keys" rather
+    // than the last held keys or silence; menu presses never reach the Pi (SPEC §N).
+    u16 w = link_paused ? 0 : kw_pack((u16)(~REG_KEYINPUT & K_ALL), link_xy);
     link_write(kw_hi(w));
     link_write(kw_lo(w));
     link_last_word = w;

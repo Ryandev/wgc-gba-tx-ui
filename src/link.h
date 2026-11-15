@@ -11,7 +11,9 @@ void link_gb_mode(void); // GB mode pair; only valid straight after link_sync()
 void link_pair(u8 channel, u8 address, u8 packets); // sync + pairing message (SPEC §S)
 
 void link_start(void); // start the ~2 ms timer-3 IRQ that sends key words
-// link_set_paused() (send "no keys" while a menu is open) returns with the Phase 1 overlay, with tests.
+// While true, the send IRQ sends neutral key words (no keys pressed): Settings is open (SPEC §N).
+// Set it the frame the Settings combo fires; clear it when Settings has closed.
+extern volatile bool link_paused;
 
 // Status for the UI (written in the IRQ, read anywhere)
 extern volatile u16 link_last_word; // last key word sent

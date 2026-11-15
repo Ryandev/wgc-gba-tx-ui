@@ -27,7 +27,7 @@ _Static_assert(CTRL_LCD_X1 - CTRL_LCD_X0 + 1 <= LCD_TW * 8, "LCD canvas too narr
 _Static_assert(CTRL_LCD_Y1 - CTRL_LCD_Y0 + 1 <= LCD_TH * 8, "LCD canvas too short"); // mutate: equivalent[+ -> -, dec const +1] (compile-time check that stays true)
 // clang-format on
 
-static u32 canvas[LCD_WORDS]; // rendered here, then copied to VRAM
+static u32 lcd_words[LCD_WORDS]; // rendered here, then copied to VRAM
 
 // Palette entries (fill, highlight, shadow) of each button, in view_button order
 // clang-format off
@@ -91,27 +91,27 @@ static void lcd_render(int page)
                         (uint8_t)ps2pFont.charCount};
     int count;
     const char *const *lines = page_lines(page, &count);
-    lcd_clear(canvas);
-    lcd_text(canvas, lcd, &f, lines, count, LCD_INK);
+    lcd_clear(lcd_words);
+    lcd_text(lcd_words, lcd, &f, lines, count, LCD_INK);
     if (page == PAGE_TITLE) {
         // over the two blank lines above "WIRELESS", mast centred; as the mockup, the icon's top is 21
         // rows above "WIRELESS" (line 2), leaving 3 px between the mast and the text
         const int text_top = lcd.h / 2 - count * LCD_LINE_H / 2;
-        lcd_antenna(canvas, lcd.w / 2 - 1, text_top + 2 * LCD_LINE_H - 21 + 9, LCD_INK);
+        lcd_antenna(lcd_words, lcd.w / 2 - 1, text_top + 2 * LCD_LINE_H - 21 + 9, LCD_INK);
     } else if (page != PAGE_TIP) {
-        lcd_bar(canvas, lcd, NOTE_FRAMES, NOTE_FRAMES, LCD_INK); // notes count down
+        lcd_bar(lcd_words, lcd, NOTE_FRAMES, NOTE_FRAMES, LCD_INK); // notes count down
     }
-    memcpy32(&tile_mem[CBB_LCD][1], canvas, LCD_WORDS);
+    memcpy32(&tile_mem[CBB_LCD][1], lcd_words, LCD_WORDS);
 }
 
 // Redraw the countdown bar and copy just the tile rows it touches.
 static void lcd_bar_update(unsigned left)
 {
-    lcd_bar(canvas, lcd, left, NOTE_FRAMES, LCD_INK);
+    lcd_bar(lcd_words, lcd, left, NOTE_FRAMES, LCD_INK);
     int first = 0; // mutate: equivalent[0 -> 1] (out parameter: always overwritten)
     int count = 0; // mutate: equivalent[0 -> 1] (out parameter: always overwritten)
     lcd_bar_rows(lcd, &first, &count);
-    memcpy32(&tile_mem[CBB_LCD][1 + first * LCD_TW], &canvas[first * LCD_ROW_WORDS],
+    memcpy32(&tile_mem[CBB_LCD][1 + first * LCD_TW], &lcd_words[first * LCD_ROW_WORDS],
              (u32)(count * LCD_ROW_WORDS));
 }
 

@@ -18,10 +18,11 @@ def main():
         out = os.path.join(HERE, 'baselines', ver)
         os.makedirs(out, exist_ok=True)
         for name, sc in SCENARIOS.items():
+            if 'expect' in sc: continue  # ours-only feature: no stock recording to make
             with tempfile.TemporaryDirectory() as d:
                 subprocess.run([harness, rom, d] + sc.get('stock', sc['ours']), check=True, capture_output=True)
                 shutil.copy(os.path.join(d, 'cart_writes.log'), os.path.join(out, name + '.log'))
-        print(f'recorded {len(SCENARIOS)} scenarios for {ver} from {os.path.basename(rom)} -> {out}')
+        print(f'recorded {sum("expect" not in sc for sc in SCENARIOS.values())} scenarios for {ver} from {os.path.basename(rom)} -> {out}')
 
 
 if __name__ == '__main__':

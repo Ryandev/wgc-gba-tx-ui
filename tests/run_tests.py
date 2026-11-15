@@ -90,7 +90,8 @@ def main():
     base = os.path.join(HERE, 'baselines', ver)
     fails = 0
     for name, sc in SCENARIOS.items():
-        s_w, s_k, s_e = read_log(os.path.join(base, name + '.log'))
+        ours_only = 'expect' in sc  # a feature stock doesn't have: checked against `expect`, not stock
+        s_w, s_k, s_e = ([], [], None) if ours_only else read_log(os.path.join(base, name + '.log'))
         with tempfile.TemporaryDirectory() as d:
             r = subprocess.run([harness, rom, d] + sc['ours'], capture_output=True, text=True)
             if r.returncode:  # the harness itself failed: an infrastructure error, not a test result
@@ -99,7 +100,11 @@ def main():
             o_w, o_k, o_e = read_log(os.path.join(d, 'cart_writes.log'))
         s, o = analyse(s_w, proto, s_e), analyse(o_w, proto, o_e)
         probs = list(o['errs'])
-        if o['pre'] != s['pre']: probs.append(f"preamble {fmt(o['pre'])} != stock {fmt(s['pre'])}")
+        if ours_only:
+            if o['pre'] != sc['pre'][ver]:
+                probs.append(f"preamble {fmt(o['pre'])} != {fmt(sc['pre'][ver])}")
+        elif o['pre'] != s['pre']:
+            probs.append(f"preamble {fmt(o['pre'])} != stock {fmt(s['pre'])}")
         if sc.get('sync_after_a') and o_w:
             a_press = next((c for _, c, m in o_k if m & 1), None)  # first A press (KEYINPUT bit 0)
             if a_press is None or o_w[0][1] < a_press:
@@ -108,9 +113,17 @@ def main():
             if o_w[k + 1][1] - o_w[k][1] < MINPAIR:
                 probs.append(f'write spacing {(o_w[k + 1][1] - o_w[k][1]) / CPU_HZ * 1000:.3f} ms < {MIN_PAIR_MS} ms at write {k}')
                 break
-        if collapsed(o['pairs']) != collapsed(s['pairs']):
+        if ours_only:
+            words = [w for k, w in enumerate(p[2] for p in o['pairs']) if k == 0 or w != o['pairs'][k - 1][2]]
+            want = [pack(m, proto['xy']) for m in sc['expect']]
+            if words != want:
+                probs.append(f'key words {fmt(words)} != expected {fmt(want)}')
+        elif collapsed(o['pairs']) != collapsed(s['pairs']):
             probs.append(f"pairs {collapsed(o['pairs'])} != stock {collapsed(s['pairs'])}")
-        gap, lat, rate = timing(o['pairs'], o_k, proto)
+        # press-to-send: only keys pressed while input passes through (`lat_keys` limits it for ours-only
+        # scenarios, where presses inside Settings are deliberately not sent)
+        lat_keys = [k for k in o_k if sc.get('lat_keys', lambda c: True)(k[1])] if ours_only else o_k
+        gap, lat, rate = timing(o['pairs'], lat_keys, proto)
         sgap, slat, _ = timing(s['pairs'], s_k, proto)
         if gap > MAX_GAP_MS: probs.append(f'gap {gap:.2f} ms > {MAX_GAP_MS} ms')
         if len(o['pairs']) > 2:  # the send period is a design value: 524 ticks of 64 cycles (re-check F4)
