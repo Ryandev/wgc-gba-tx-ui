@@ -38,6 +38,22 @@ up on the Pi 4 / RetroArch as a USB HID joystick.
 **Goal:** replace the plain text-console UI on the cart with something more interesting, without
 breaking the wireless link.
 
+## Flashing to a cart
+Every push on [GitHub Actions](https://github.com/Ryandev/wgc-gba-tx-ui/actions/workflows/ci.yml) builds,
+validates and uploads both ROMs as the **`roms`** build artifact (or run `make dist` locally to stage
+`build/dist/`):
+- **`wgc-gba-tx-ui-v1.1a.gba`** — for **v1.1a** carts (pre-2023; stock screen shows `v1.1a`)
+- **`wgc-gba-tx-ui-v1.1b.gba`** — for **v1.1b** carts (2023+; stock screen shows `v1.1b`)
+
+With an insideGadgets **GBxCart RW** and [**FlashGBX**](https://github.com/lesserkuma/FlashGBX) (no soldering):
+1. Set the GBxCart RW to **GBA / 3.3 V**, insert the TX cart, and open FlashGBX in **Game Boy Advance** mode.
+2. **Back up first:** click *Backup ROM* and keep your stock dump safe.
+3. **Flash:** click *Write ROM* and pick the `.gba` matching your cart revision (`v1.1a` or `v1.1b`).
+
+Reflashing only touches the 4 MB GBA flash chip (`MX29LV320`)—the cart's ATtiny48 firmware and its saved
+RF pairing in EEPROM are untouched, and you can restore your stock dump at any time. Full details and stock
+SHA-256 hashes are in [FLASHING.md](FLASHING.md).
+
 ## Setup (a fresh machine)
 Ubuntu 24.04 (native or WSL):
 ```
@@ -54,6 +70,8 @@ the recorded baselines are. Optional: `scripts/install_mull.sh` (Mull, not neede
 ## Build
 ```
 make                 # ROM for v1.1a carts -> build/wgc-gba-tx-ui.gba   (PROTOCOL=V11B for 2023+ carts)
+make dist            # both ROMs + docs/licences + SHA256SUMS -> build/dist/ (same bundle CI uploads)
+make rom-check       # check GBA BIOS header, logo, checksum, size and ELF/IWRAM placement
 make test            # headless mGBA: compare cart writes with the stock ROM recordings
 make run             # open in mgba-qt
 make unit            # host unit tests of src/core, both protocols
@@ -61,7 +79,7 @@ make coverage        # unit + gcovr gate (100% lines and branches), report in bu
 make visual          # golden-image tests (pixel-exact); make visual-approve SCREEN=a,b after looking
 make mutate          # mutation testing on the real ARM build (slow)
 make lint            # gcc -fanalyzer + clang-tidy + cppcheck
-make check           # format-check + lint + coverage + protocol/timing + visual (CI + pre-push hook)
+make check           # format-check + lint + coverage + tools-test + rom-check + test-all + visual
 make hooks           # once per clone: pushes run `make check` first
 ```
 Needs Ubuntu packages `gcc-arm-none-eabi binutils-arm-none-eabi libnewlib-arm-none-eabi build-essential git
@@ -81,6 +99,7 @@ GitHub at pinned commits by `scripts/fetch_deps.sh`.
 | `src/` | ROM hardware layer: `link_write.s` (bus-faithful cart write), `link.c` (2 ms timer IRQ), `main.c` (boot, screens), `screen_main.c` (controller view: drawing on BG2, buttons and LED lit by palette writes; splash, notes, Settings zoom), `screen_settings.c` (Settings pages on BG1) |
 | `src/core/` | Pure logic, no hardware (host-tested): key packing and protocol bytes, boot holds, pairing menu, text, controller view (lighting, release fade, LED colours), LCD notes (timers, text and countdown bar canvas), boot splash (phases, skip), Settings (combo, pages, options), idle dim/sleep, zoom, generic 4bpp canvas (ARM, in IWRAM) |
 | `tests/unit/` | Unity unit tests of `src/core`, run for both protocols (`make unit`, `make coverage`) |
+| `tests/check_rom.py` | Validates the built `.gba` header (logo, 0x96 fixed byte, complement checksum, size, pad trailer) and `.elf` memory map |
 | `tests/run_tests.py` | Regression test against the stock ROM's recorded cart writes |
 | `tools/disasm_thumb.py` | Small Capstone disassembler used for the reverse engineering |
 | `tools/emu_harness.c` | Headless mGBA runner: boot with keys held, script presses, dump frames and log cart writes. Build notes are at the top of the file. |

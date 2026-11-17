@@ -20,18 +20,15 @@ jobs:
         with:
           path: build/deps
           key: deps-${{ hashFiles('scripts/fetch_deps.sh') }}
-      - name: make check (format, lint, protocol + timing tests v1.1a/v1.1b)
+      - name: make check (format, lint, ROM header + ELF check, protocol + timing, visual)
         run: make check
+      - name: Stage ROM bundle
+        run: make dist
       - name: Upload ROMs
         uses: actions/upload-artifact@v4
         with:
           name: roms
-          path: |
-            build/wgc-gba-tx-ui.gba
-            build/v11b/wgc-gba-tx-ui.gba
-            LICENSE
-            LICENSES.md
-            assets/fonts/OFL.txt
+          path: build/dist/*
 
   mutation:
     # ~45-60 min: runs on pushes to main (and by hand), not on every branch push or PR

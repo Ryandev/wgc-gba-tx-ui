@@ -9,6 +9,8 @@ import unittest
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, 'tools'))
+sys.path.insert(0, os.path.join(ROOT, 'tests'))
+import check_rom  # noqa: E402
 import gen_controller_svg  # noqa: E402
 import svg_to_gba  # noqa: E402
 import ttf_to_tfont  # noqa: E402
@@ -318,6 +320,44 @@ class SvgToGba(unittest.TestCase):
         self.assertEqual(len(parts), 27)
         # every part is visible (none fully hidden under a later one)
         self.assertEqual({i for i, n in enumerate(labels.histogram()) if n}, set(range(len(parts) + 1)))
+
+
+class CheckRom(unittest.TestCase):
+    @staticmethod
+    def valid_rom():
+        rom = bytearray(0xC0 + 16)
+        rom[0:4] = (0xEA00002E).to_bytes(4, 'little')
+        rom[0x04:0xA0] = check_rom.LOGO
+        rom[0xA0:0xAC] = b'WGC.TX.UI\x00\x00\x00'
+        rom[0xAC:0xB0] = b'WGCU'
+        rom[0xB0:0xB2] = b'01'
+        rom[0xB2] = 0x96
+        rom[0xBD] = check_rom.header_complement(rom)
+        rom[-8:] = check_rom.PAD_TRAILER
+        return rom
+
+    def test_valid_rom_passes(self):
+        self.assertEqual(check_rom.check_rom_bytes(bytes(self.valid_rom())), [])
+
+    def test_corrupt_header_fields_and_trailer_are_caught(self):
+        for mut, msg in [
+            (lambda r: r.__setitem__(3, 0x00), 'entry word'),
+            (lambda r: r.__setitem__(0, 0x00), 'entry branch target'),
+            (lambda r: r.__setitem__(0x04, 0x00), 'Nintendo logo'),
+            (lambda r: r.__setitem__(0xA0, ord('X')), 'header title'),
+            (lambda r: r.__setitem__(0xAC, ord('X')), 'header game code'),
+            (lambda r: r.__setitem__(0xB0, ord('9')), 'header maker code'),
+            (lambda r: r.__setitem__(0xB2, 0x00), 'fixed byte at 0xB2'),
+            (lambda r: r.__setitem__(0xB5, 0x01), '0xB3..0xBC'),
+            (lambda r: r.__setitem__(0xBD, (r[0xBD] ^ 1)), 'header complement check'),
+            (lambda r: r.__setitem__(0xBE, 0x01), '0xBE..0xBF'),
+            (lambda r: r.__setitem__(-1, 0xFF), 'ROM trailer'),
+            (lambda r: r.append(0), 'multiple of 4 bytes'),
+        ]:
+            rom = self.valid_rom()
+            mut(rom)
+            errs = check_rom.check_rom_bytes(bytes(rom))
+            self.assertTrue(any(msg in e for e in errs), f'expected {msg!r} in {errs}')
 
 
 if __name__ == '__main__':

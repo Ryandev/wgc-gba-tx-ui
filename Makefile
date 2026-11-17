@@ -46,7 +46,7 @@ GEN_C    := $(B)/gen/font_ps2p.c $(B)/gen/ctrl.c
 GEN_H    := $(B)/gen/ctrl.h
 OBJS     := $(SRC_C:src/%.c=$(B)/obj/%.o) $(SRC_S:src/%.s=$(B)/obj/%.o) $(GEN_C:$(B)/gen/%.c=$(B)/obj/gen/%.o)
 
-.PHONY: all deps tools-test test test-v11b test-all visual visual-approve baselines unit unit-fast coverage mutate lint lint-one format format-check check hooks run clean
+.PHONY: all deps tools-test rom-check dist test test-v11b test-all visual visual-approve baselines unit unit-fast coverage mutate lint lint-one format format-check check hooks run clean
 all: $(B)/$(NAME).gba
 
 # ---- third-party: fetched at pinned commits, built here ------------------------------------
@@ -252,12 +252,25 @@ format:
 format-check:
 	@clang-format --dry-run --Werror $(FMT_SRC) && echo "format: OK"
 
-# Everything CI and the pre-push hook run
+#Everything CI and the pre-push hook run
 # Asset generators (tools/*.py)
 tools-test:
 	python3 tests/test_tools.py
 
-check: format-check lint coverage tools-test test-all visual
+# Validate built .gba headers + .elf memory map / symbol placement for both cart revisions
+rom-check: $(B)/$(NAME).gba $(B)/v11b/$(NAME).gba
+	python3 tests/check_rom.py $(B)/$(NAME).gba $(B)/$(NAME).elf $(B)/v11b/$(NAME).gba $(B)/v11b/$(NAME).elf
+
+# Stage flash-ready ROM bundle (both cart revisions + docs/licences + SHA-256) in build/dist/
+dist: rom-check
+	@mkdir -p $(B)/dist
+	cp $(B)/$(NAME).gba $(B)/dist/$(NAME)-v1.1a.gba
+	cp $(B)/v11b/$(NAME).gba $(B)/dist/$(NAME)-v1.1b.gba
+	cp FLASHING.md LICENSE LICENSES.md assets/fonts/OFL.txt $(B)/dist/
+	(cd $(B)/dist && sha256sum $(NAME)-v1.1a.gba $(NAME)-v1.1b.gba > SHA256SUMS)
+	@echo "dist: staged in $(B)/dist/"
+
+check: format-check lint coverage tools-test rom-check test-all visual
 
 # Use the repo's git hooks (pre-push runs `make check`)
 hooks:
@@ -268,4 +281,4 @@ run: $(B)/$(NAME).gba
 
 clean:
 	rm -rf $(B)/obj $(B)/tonc $(B)/*.o $(B)/*.a $(B)/*.elf $(B)/*.gba $(B)/*.map $(B)/gbafix $(B)/emu_harness \
-	  $(B)/unit $(B)/unit-fast $(B)/.protocol-* $(B)/coverage* $(B)/v11b $(B)/mutate* $(B)/shots $(B)/visual $(B)/gen
+	  $(B)/unit $(B)/unit-fast $(B)/.protocol-* $(B)/coverage* $(B)/v11b $(B)/mutate* $(B)/shots $(B)/visual $(B)/gen $(B)/dist
